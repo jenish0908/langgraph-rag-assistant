@@ -1,0 +1,6 @@
+[server]
+# Uploaded-file cap; we don't accept uploads yet, so keep it small.
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false

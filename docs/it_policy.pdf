@@ -1,0 +1,176 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Length 1762 >>
+stream
+BT
+/Helvetica-Bold 16 Tf
+1 0 0 1 72 750 Tm
+(Northwind Robotics - IT & Network Policy) Tj
+/Helvetica 9 Tf
+1 0 0 1 72 728 Tm
+/Helvetica-Bold 11 Tf
+1 0 0 1 72 713 Tm
+(1. Office Wireless Network) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 696 Tm
+(The primary office wireless network is named NW-CORP. The wifi) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 680 Tm
+(password is Ferrite-Anchor-88 and is rotated every 90 days. IT) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 664 Tm
+(announces the new password by email one week before the change.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 648 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 632 Tm
+(A separate guest network, NW-GUEST, uses the password) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 616 Tm
+(welcome2northwind. The guest network is isolated from all) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 600 Tm
+(internal systems and must be used for visitor devices.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 584 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 568 Tm
+(Personal phones may connect to NW-GUEST only. Connecting a) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 552 Tm
+(personal device to NW-CORP is a policy violation.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 536 Tm
+/Helvetica-Bold 11 Tf
+1 0 0 1 72 520 Tm
+(2. VPN Access) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 503 Tm
+(Remote access to internal systems requires the company VPN.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 487 Tm
+(Request access through the IT portal; approval typically takes) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 471 Tm
+(one business day. VPN sessions expire after 12 hours and must) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 455 Tm
+(be re-authenticated with your hardware security key.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 439 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 423 Tm
+(Split tunnelling is disabled. All traffic routes through the) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 407 Tm
+(company gateway while the VPN is active.) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 3 0 R /Resources << /Font << /Helvetica 7 0 R /Helvetica-Bold 8 0 R >> >> >>
+endobj
+5 0 obj
+<< /Length 1867 >>
+stream
+BT
+/Helvetica-Bold 14 Tf
+1 0 0 1 72 750 Tm
+(3. Software and Licensing) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 730 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 714 Tm
+(Approved software is listed in the IT portal catalogue and can) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 698 Tm
+(be installed without a request. Anything outside the catalogue) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 682 Tm
+(needs written approval from IT before installation.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 666 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 650 Tm
+(Open-source software with a permissive licence \(MIT, Apache 2.0,) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 634 Tm
+(BSD\) is pre-approved for development use. Copyleft licences such) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 618 Tm
+(as GPL require review by the legal team before use in any) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 602 Tm
+(product that ships to customers.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 586 Tm
+/Helvetica-Bold 14 Tf
+1 0 0 1 72 570 Tm
+(4. IT Support Desk) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 550 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 534 Tm
+(The support desk is staffed 08:00 to 18:00 on working days.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 518 Tm
+(Outside those hours, only production incidents are handled, via) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 502 Tm
+(the on-call pager.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 486 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 470 Tm
+(Standard requests are answered within one business day. Password) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 454 Tm
+(resets and account lockouts are treated as urgent and handled) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 438 Tm
+(within one hour during staffed times.) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 422 Tm
+/Helvetica 10 Tf
+1 0 0 1 72 406 Tm
+(Lost hardware security keys must be reported immediately. A) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 390 Tm
+(replacement key is issued within two working days, and the lost) Tj
+/Helvetica 10 Tf
+1 0 0 1 72 374 Tm
+(key is revoked the same day it is reported.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R /Resources << /Font << /Helvetica 7 0 R /Helvetica-Bold 8 0 R >> >> >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000001935 00000 n 
+0000002090 00000 n 
+0000004009 00000 n 
+0000004164 00000 n 
+0000004234 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+4309
+%%EOF

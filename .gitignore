@@ -1,0 +1,19 @@
+# --- secrets: never commit these ---
+.env
+.streamlit/secrets.toml
+
+# --- environment & caches ---
+.venv/
+__pycache__/
+*.pyc
+.model_cache/
+
+# --- runtime data ---
+memory.db
+# SQLite sidecar files (gitignore has no inline comments - keep these bare)
+memory.db-shm
+memory.db-wal
+logs/
+
+# --- documents: sample docs ARE committed so the deployed app has content.
+#     Add a rule here if your own documents are private.

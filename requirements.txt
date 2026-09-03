@@ -1,0 +1,24 @@
+# --- The graph engine ---
+langgraph                     # the state machine (nodes, edges, loops)
+langgraph-checkpoint-sqlite   # conversation memory that survives a restart
+
+# --- LangChain building blocks ---
+langchain-core                # shared types: Document, messages, vector stores
+langchain-text-splitters      # chops documents into chunks
+
+# --- Language model providers -----------------------------------------------
+# The app auto-detects which to use from whichever API key is present.
+# See llm.py. Drop any you don't intend to use.
+langchain-groq                # FREE, fast        -> console.groq.com/keys
+langchain-google-genai        # FREE, generous    -> aistudio.google.com/apikey
+langchain-ollama              # FREE, local/offline (needs Ollama installed)
+langchain-anthropic           # PAID, best quality-> console.anthropic.com
+
+# --- Embeddings (always local: no API key, no PyTorch, ~50 MB) ---
+fastembed
+
+# --- Reading source files ---
+pypdf                         # extract text from PDFs
+
+# --- The web UI ---
+streamlit                     # chat interface with live graph progress
