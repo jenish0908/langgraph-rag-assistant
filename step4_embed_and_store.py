@@ -67,15 +67,55 @@ class FastEmbedAdapter(Embeddings):
 # ---------------------------------------------------------------------------
 # 2. BUILD THE STORE  (Step 5 imports this)
 # ---------------------------------------------------------------------------
-def build_vector_store() -> InMemoryVectorStore:
-    """Load docs -> chunk them -> embed them -> return a searchable store."""
-    docs = load_documents()
-    chunks = chunk_documents(docs)
-    embeddings = FastEmbedAdapter()
+def build_vector_store(on_stage=None) -> InMemoryVectorStore:
+    """Load docs -> chunk them -> embed them -> return a searchable store.
 
-    # from_documents() calls embed_documents() on every chunk and keeps the
-    # vector alongside the text and metadata.
-    return InMemoryVectorStore.from_documents(chunks, embedding=embeddings)
+    on_stage: optional callback(stage, fact) where stage is one of
+    "load"/"chunk"/"embed"/"store".
+
+        fact is None  -> the stage has STARTED
+        fact is a str -> the stage has FINISHED, with that summary
+
+    The UI uses the pair to highlight the running stage honestly. Signalling
+    only on completion would light up "embed" *after* the seven seconds of
+    embedding had already elapsed - i.e. it would show you the one thing that
+    was never slow. Pass nothing and this is a no-op.
+    """
+    report = on_stage or (lambda *a, **k: None)
+
+    report("load", None)
+    docs = load_documents()
+    sources = sorted({d.metadata["source"] for d in docs})
+    report("load", f"{len(docs)} docs from {len(sources)} file(s)")
+
+    report("chunk", None)
+    chunks = chunk_documents(docs)
+    avg = sum(len(c.page_content) for c in chunks) // max(len(chunks), 1)
+    report("chunk", f"{len(chunks)} chunks, avg {avg} chars")
+
+    # Embedding is done explicitly rather than inside from_documents() so the
+    # expensive step is attributable - it is ~70% of startup time.
+    report("embed", None)
+    embeddings = FastEmbedAdapter()
+    texts = [c.page_content for c in chunks]
+    vectors = embeddings.embed_documents(texts)
+    report("embed", f"{len(vectors)} x {len(vectors[0])}-dim vectors")
+
+    report("store", None)
+    store = InMemoryVectorStore(embedding=embeddings)
+    # The store is a plain dict of {id: {id, vector, text, metadata}} - see
+    # Step 4's notes. Writing the precomputed vectors in directly avoids
+    # embedding all over again, which add_documents() would do.
+    for chunk, vector in zip(chunks, vectors):
+        key = f"{chunk.metadata['source']}#{chunk.metadata['chunk_id']}"
+        store.store[key] = {
+            "id": key,
+            "vector": vector,
+            "text": chunk.page_content,
+            "metadata": chunk.metadata,
+        }
+    report("store", f"{len(store.store)} chunks searchable")
+    return store
 
 
 # ---------------------------------------------------------------------------

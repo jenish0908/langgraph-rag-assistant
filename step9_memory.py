@@ -74,11 +74,17 @@ def append_or_reset(old: list, new) -> list:
 _RESOURCES = None
 
 
-def get_resources() -> dict:
+def get_resources(on_stage=None) -> dict:
+    """Build the store and models once, on first use.
+
+    on_stage is forwarded to build_vector_store so a UI can show ingestion
+    progress. It only fires on the FIRST call - afterwards everything is
+    already built, which is the whole point.
+    """
     global _RESOURCES
     if _RESOURCES is None:
         _RESOURCES = {
-            "store": build_vector_store(),
+            "store": build_vector_store(on_stage=on_stage),
             "answer_llm": get_llm(max_tokens=250),
             "grade_llm": get_llm(max_tokens=30),
             "rewrite_llm": get_llm(max_tokens=40),
