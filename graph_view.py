@@ -46,41 +46,52 @@ INGEST_STEPS = [
 def styles(drawer_open: bool) -> str:
     """All CSS for the drawer and the flow cards.
 
-    The drawer is an ordinary Streamlit container pinned to the right with
-    position:fixed. `st.container(key="steps_drawer")` renders with the class
-    `st-key-steps_drawer`, which is the supported hook for styling a
-    container - no custom component required.
+    The drawer is a single div we own, rendered inside one st.markdown block
+    and pinned to the right with position:fixed.
 
     Open/closed is a CSS transform rather than rendering/not-rendering the
-    content, so the panel slides instead of blinking, and its contents stay
-    alive underneath while a question is running.
+    content, so the panel slides instead of blinking.
     """
     shift = "0" if drawer_open else "105%"
     shadow = "-18px 0 48px rgba(0,0,0,.28)" if drawer_open else "none"
     return f"""
 <style>
-/* ---------- the slide-in drawer ---------- */
-.st-key-steps_drawer {{
+/* ---------- the slide-in drawer ----------
+   This is OUR div inside a single st.markdown block, not a Streamlit
+   container. The first attempt styled st.container(key=...) - the class name
+   was right, but its children are Streamlit's own nested block wrappers, and
+   re-parenting those into a fixed panel left the panel painting its
+   background with no visible content. Owning the whole subtree removes that
+   entire class of problem. */
+.ragdrawer {{
     position: fixed;
     top: 0; right: 0;
-    width: min(460px, 92vw);
+    width: min(470px, 94vw);
     height: 100vh;
-    z-index: 9990;
-    padding: 3.2rem 1.15rem 1.5rem 1.15rem;
+    z-index: 999990;
+    padding: 1.1rem 1.15rem 2rem 1.15rem;
     overflow-y: auto;
-    /* Explicit black rather than var(--background-color): the drawer is
-       position:fixed and sits outside the normal flow, so it does not
-       inherit the canvas colour reliably. */
-    background: #000000;
+    background: #050506;
+    color: #e8e8ea;
     border-left: 1px solid rgba(148,163,184,.22);
     box-shadow: {shadow};
     transform: translateX({shift});
     transition: transform .32s cubic-bezier(.4,0,.2,1), box-shadow .32s ease;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }}
-.st-key-steps_drawer::-webkit-scrollbar {{ width: 8px; }}
-.st-key-steps_drawer::-webkit-scrollbar-thumb {{
+.ragdrawer::-webkit-scrollbar {{ width: 8px; }}
+.ragdrawer::-webkit-scrollbar-thumb {{
     background: rgba(148,163,184,.4); border-radius: 4px;
 }}
+.dtitle {{ font-size: .95rem; font-weight: 700; margin: 0 0 .1rem; }}
+.dsub {{ font-size: .7rem; opacity: .55; margin: 0 0 .7rem; }}
+.dsec {{
+    font-size: .66rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; opacity: .5;
+    margin: 1.1rem 0 .4rem; padding-top: .8rem;
+    border-top: 1px solid rgba(148,163,184,.16);
+}}
+.dsec:first-of-type {{ border-top: 0; padding-top: 0; margin-top: .2rem; }}
 
 /* ---------- flow cards ---------- */
 .flow {{ display: flex; flex-direction: column; gap: 0; }}
@@ -695,3 +706,36 @@ def next_node(node: str, update: dict, kept_total: int = 0,
             return "no_answer"
         return "rewrite_query"
     return None                     # terminal node - nothing comes next
+
+
+# ---------------------------------------------------------------------------
+# THE WHOLE DRAWER, AS ONE BLOCK
+# ---------------------------------------------------------------------------
+def drawer_html(runs: dict | None = None, current: str | None = None,
+                route: str | None = None, finished: bool = False,
+                ingest: dict | None = None, is_open: bool = False) -> str:
+    """Everything in the panel: styles, diagram, step outputs, ingestion.
+
+    Returned as ONE html string so a single st.markdown owns the entire
+    subtree. Nothing inside is a Streamlit element, so there are no nested
+    block wrappers to fight with when the panel is position:fixed.
+    """
+    ingest = ingest or {}
+    seconds = ingest.get("seconds", 0.0)
+
+    return (
+        styles(is_open)
+        + '<div class="ragdrawer">'
+        + '<div class="dtitle">Pipeline</div>'
+        + '<div class="dsub">What the graph did for the latest question.</div>'
+        + '<div class="dsec">The graph</div>'
+        + graph_svg(runs, current, route, finished)
+        + '<div class="dsec">Step outputs &mdash; click to expand</div>'
+        + query_html(runs, current, route, finished)
+        + '<div class="dsec">Startup &mdash; ingestion, ran once</div>'
+        + ingestion_html(ingest.get("current"), ingest.get("done"),
+                         ingest.get("facts"))
+        + f'<div class="fnote">Ran once in {seconds:.1f}s, not per question. '
+          'Embedding is ~90% of it.</div>'
+        + '</div>'
+    )

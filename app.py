@@ -31,7 +31,7 @@ for _key in ("GROQ_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
     except Exception:
         pass          # no secrets.toml locally - that is fine, we fall back
 
-from graph_view import (fact_for, graph_svg, ingestion_html,  # noqa: E402
+from graph_view import (drawer_html, fact_for, graph_svg,  # noqa: E402
                         next_node, output_html, query_html, styles)
 from llm import describe as describe_llm                       # noqa: E402
 from prompts import cite                                       # noqa: E402
@@ -86,8 +86,6 @@ st.session_state.setdefault("drawer_open", False)
 st.session_state.setdefault("last_runs", {})
 st.session_state.setdefault("last_route", None)
 
-st.markdown(styles(st.session_state.drawer_open), unsafe_allow_html=True)
-
 # --- Header + the drawer toggle -------------------------------------------
 head, toggle = st.columns([5, 1])
 with head:
@@ -100,59 +98,41 @@ with toggle:
         st.rerun()
 
 # --- The right-hand drawer -------------------------------------------------
-# Rendered on EVERY run, open or shut. Closed just means translated off-screen
-# by CSS - so the live updates below can write into it while it is hidden, and
-# opening it mid-question shows the run already in progress.
-drawer = st.container(key="steps_drawer")
-with drawer:
-    st.markdown("#### ⚡ Pipeline")
-    st.caption("What the graph did for the most recent question.")
-    live_graph = st.empty()
-    live_graph.markdown(
-        graph_svg(st.session_state.last_runs,
-                  route=st.session_state.last_route, finished=True),
+# ONE st.markdown owns the whole panel. It is always rendered; "closed" just
+# means translated off-screen by CSS, so live updates keep painting into it
+# and opening it mid-question shows the run already in progress.
+drawer_slot = st.empty()
+INGEST = {"current": None}
+
+
+def paint_drawer(runs=None, current=None, route=None, finished=False):
+    drawer_slot.markdown(
+        drawer_html(runs if runs is not None else st.session_state.last_runs,
+                    current,
+                    route if route is not None else st.session_state.last_route,
+                    finished,
+                    ingest={**record, "current": INGEST["current"]},
+                    is_open=st.session_state.drawer_open),
         unsafe_allow_html=True)
 
-    st.markdown("###### Step outputs")
-    st.caption("Click a step to see exactly what it produced.")
-    live_flow = st.empty()
-    live_flow.markdown(
-        query_html(st.session_state.last_runs,
-                   route=st.session_state.last_route,
-                   finished=True),
-        unsafe_allow_html=True)
-
-    st.divider()
-    st.markdown("###### Startup — ingestion, ran once")
-    ingest_slot = st.empty()
-    ingest_caption = st.empty()
 
 # --- Ingestion (first script run in this process only) --------------------
 if not record["done"]:
-    current = {"stage": None}
-
     def on_stage(stage, fact):
         if fact is None:                      # stage STARTED
-            current["stage"] = stage
+            INGEST["current"] = stage
         else:                                 # stage FINISHED
             record["facts"][stage] = fact
             record["done"].add(stage)
-            current["stage"] = None
-        ingest_slot.markdown(
-            ingestion_html(current["stage"], record["done"], record["facts"]),
-            unsafe_allow_html=True)
+            INGEST["current"] = None
+        paint_drawer(finished=True)
 
     t0 = time.time()
     with st.spinner("Starting up - reading and embedding your documents..."):
         get_resources(on_stage=on_stage)      # the expensive part
     record["seconds"] = time.time() - t0
 
-ingest_slot.markdown(
-    ingestion_html(None, record["done"], record["facts"]),
-    unsafe_allow_html=True)
-ingest_caption.caption(
-    f"Ran once in {record['seconds']:.1f}s — not per question. "
-    "Embedding is ~90% of it.")
+paint_drawer(finished=True)
 
 graph = compiled_graph()
 sources = list_sources()
@@ -205,11 +185,8 @@ if question := st.chat_input("Ask a question..."):
         t0 = time.time()
 
         def paint(current=None, finished=False):
-            """Redraw the diagram and the step list. Safe open or shut."""
-            live_graph.markdown(graph_svg(runs, current, route, finished),
-                                unsafe_allow_html=True)
-            live_flow.markdown(query_html(runs, current, route, finished),
-                               unsafe_allow_html=True)
+            """Redraw the drawer. Safe whether it is open or shut."""
+            paint_drawer(runs, current, route, finished)
 
         paint("contextualize")
         status.info(STEP_LABELS["contextualize"])
