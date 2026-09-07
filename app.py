@@ -89,10 +89,22 @@ st.session_state.setdefault("last_route", None)
 
 st.markdown(chat_css(), unsafe_allow_html=True)
 
-# --- Header + the drawer toggle -------------------------------------------
-head, toggle = st.columns([5, 1])
+# --- Header ---------------------------------------------------------------
+# No sidebar: nothing is ever added to st.sidebar, so Streamlit does not
+# render one at all. The two things it held that still matter are a "new
+# conversation" action (now the + button) and the documents/engine details
+# (now inside the steps drawer).
+head, plus, toggle = st.columns([6, 0.6, 1.5])
 with head:
     st.title("📄 Document Assistant")
+with plus:
+    st.write("")
+    if st.button("＋", width="stretch", help="New conversation"):
+        st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
+        st.session_state.messages = []
+        st.session_state.last_runs = {}
+        st.session_state.last_route = None
+        st.rerun()
 with toggle:
     st.write("")
     label = "✕  Hide steps" if st.session_state.drawer_open else "⚡  Show steps"
@@ -106,6 +118,7 @@ with toggle:
 # and opening it mid-question shows the run already in progress.
 drawer_slot = st.empty()
 INGEST = {"current": None}
+SOURCES: list[str] = []      # filled once ingestion has run
 
 
 def paint_drawer(runs=None, current=None, route=None, finished=False):
@@ -115,7 +128,10 @@ def paint_drawer(runs=None, current=None, route=None, finished=False):
                     route if route is not None else st.session_state.last_route,
                     finished,
                     ingest={**record, "current": INGEST["current"]},
-                    is_open=st.session_state.drawer_open),
+                    is_open=st.session_state.drawer_open,
+                    sources=SOURCES,
+                    engine=describe_llm(),
+                    thread_id=st.session_state.thread_id),
         unsafe_allow_html=True)
 
 
@@ -135,31 +151,12 @@ if not record["done"]:
         get_resources(on_stage=on_stage)      # the expensive part
     record["seconds"] = time.time() - t0
 
+graph = compiled_graph()
+SOURCES = list_sources()
 paint_drawer(finished=True)
 
-graph = compiled_graph()
-sources = list_sources()
-
-# --- Sidebar --------------------------------------------------------------
-with st.sidebar:
-    st.subheader("Documents")
-    for s in sources:
-        st.markdown(f"- `{s}`")
-
-    st.subheader("Engine")
-    st.caption(f"Language model: `{describe_llm()}`")
-    st.caption("Search: `fastembed / bge-small-en-v1.5`")
-
-    st.divider()
-    st.caption(f"Conversation: `{st.session_state.thread_id}`")
-    st.caption(f"Trace log: `logs/{TEXT_LOG.name}`")
-    if st.button("New conversation", width="stretch"):
-        st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
-        st.session_state.messages = []
-        st.session_state.last_runs = {}
-        st.rerun()
-
-st.caption("Ask about the documents in the sidebar. Follow-up questions work.")
+st.caption("Ask about your documents. Follow-up questions work — "
+           "open **Show steps** to watch the graph run.")
 
 # --- History ---------------------------------------------------------------
 for msg in st.session_state.messages:

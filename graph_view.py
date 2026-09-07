@@ -92,6 +92,11 @@ def styles(drawer_open: bool) -> str:
     border-top: 1px solid rgba(148,163,184,.16);
 }}
 .dsec:first-of-type {{ border-top: 0; padding-top: 0; margin-top: .2rem; }}
+.dfile {{
+    font-family: ui-monospace, Consolas, monospace; font-size: .72rem;
+    color: rgb(16,185,129); background: rgba(16,185,129,.09);
+    border-radius: 6px; padding: .22rem .5rem; margin-bottom: .25rem;
+}}
 
 /* ---------- flow cards ---------- */
 .flow {{ display: flex; flex-direction: column; gap: 0; }}
@@ -713,7 +718,9 @@ def next_node(node: str, update: dict, kept_total: int = 0,
 # ---------------------------------------------------------------------------
 def drawer_html(runs: dict | None = None, current: str | None = None,
                 route: str | None = None, finished: bool = False,
-                ingest: dict | None = None, is_open: bool = False) -> str:
+                ingest: dict | None = None, is_open: bool = False,
+                sources: list | None = None, engine: str = "",
+                thread_id: str = "") -> str:
     """Everything in the panel: styles, diagram, step outputs, ingestion.
 
     Returned as ONE html string so a single st.markdown owns the entire
@@ -737,6 +744,13 @@ def drawer_html(runs: dict | None = None, current: str | None = None,
                          ingest.get("facts"))
         + f'<div class="fnote">Ran once in {seconds:.1f}s, not per question. '
           'Embedding is ~90% of it.</div>'
+        + '<div class="dsec">Documents</div>'
+        + "".join(f'<div class="dfile">{_esc(f)}</div>'
+                  for f in (sources or []))
+        + '<div class="dsec">Engine</div>'
+        + _kv("model", engine)
+        + _kv("search", "fastembed / bge-small-en-v1.5")
+        + _kv("thread", thread_id)
         + '</div>'
     )
 
