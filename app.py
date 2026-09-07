@@ -60,52 +60,67 @@ STEP_LABELS = {
 # ---------------------------------------------------------------------------
 # STARTUP: build everything once, drawing the ingestion pipeline as it goes
 # ---------------------------------------------------------------------------
+# A cached MUTABLE container. Streamlit hands back the same dict on every
+# rerun, so it survives like a cached value - but nothing is drawn inside a
+# cached function, which is the point.
+#
+# WHY NOT just draw inside @st.cache_resource? That was the first attempt and
+# it raised CacheReplayClosureError on the SECOND run:
+#
+#     While running bootstrap(), a streamlit element is called on some layout
+#     block created outside the function. This is incompatible with replaying
+#     the cached effect of that element.
+#
+# On a cache HIT Streamlit replays the elements the function drew last time -
+# but our placeholder belonged to the previous run and no longer exists.
+# Caching a value is fine; caching drawing is not.
 @st.cache_resource(show_spinner=False)
-def bootstrap(_diagram):
-    """Build the store, models and graph exactly once per server.
+def ingest_record() -> dict:
+    return {"facts": {}, "done": set(), "seconds": 0.0}
 
-    The leading underscore on `_diagram` tells Streamlit not to hash it -
-    a placeholder is not hashable, and we only want it for live drawing.
 
-    On every rerun after the first, this returns the cached dict instantly
-    and the callback never fires. That is correct: ingestion really did only
-    happen once. We redraw the finished diagram from the recorded facts.
-    """
-    facts, done, current = {}, set(), {"stage": None}
-
-    def on_stage(stage, fact):
-        if fact is None:                    # stage STARTED
-            current["stage"] = stage
-        else:                               # stage FINISHED
-            facts[stage] = fact
-            done.add(stage)
-            current["stage"] = None
-        _diagram.graphviz_chart(
-            ingestion_dot(current["stage"], done, facts),
-            use_container_width=True)
-
-    t0 = time.time()
-    get_resources(on_stage=on_stage)        # the expensive part
-    graph = build_graph()
-    return {"graph": graph, "facts": facts, "done": done,
-            "sources": list_sources(), "seconds": time.time() - t0}
+@st.cache_resource(show_spinner=False)
+def compiled_graph():
+    """Compile once - each call opens a SQLite connection for the checkpointer."""
+    return build_graph()
 
 
 st.title("📄 Document Assistant")
 
-_boot_area = st.container()
-with _boot_area:
-    _diagram = st.empty()
-    with st.spinner("Starting up..."):
-        boot = bootstrap(_diagram)
-    _diagram.empty()          # clear the live version; it reappears below
+record = ingest_record()
 
-graph, sources = boot["graph"], boot["sources"]
+# The FIRST script run in this process does the real ingestion and draws it
+# live. Later runs find `done` already populated and skip straight through -
+# get_resources() is itself a singleton, so it returns instantly.
+if not record["done"]:
+    live = st.empty()
+    current = {"stage": None}
+
+    def on_stage(stage, fact):
+        if fact is None:                      # stage STARTED
+            current["stage"] = stage
+        else:                                 # stage FINISHED
+            record["facts"][stage] = fact
+            record["done"].add(stage)
+            current["stage"] = None
+        live.graphviz_chart(
+            ingestion_dot(current["stage"], record["done"], record["facts"]),
+            width='stretch')
+
+    t0 = time.time()
+    with st.spinner("Starting up - reading and embedding your documents..."):
+        get_resources(on_stage=on_stage)      # the expensive part
+    record["seconds"] = time.time() - t0
+    live.empty()                              # it reappears in the expander below
+
+graph = compiled_graph()
+sources = list_sources()
+boot = record
 
 with st.expander(f"⚙️ Ingestion pipeline — ran once at startup "
                  f"({boot['seconds']:.1f}s)"):
     st.graphviz_chart(ingestion_dot(None, boot["done"], boot["facts"]),
-                      use_container_width=True)
+                      width='stretch')
     st.caption(
         "This happens once per server, not per question. Embedding is ~90% "
         "of it. Documents are read from `docs/`, split into overlapping "
@@ -156,7 +171,7 @@ for msg in st.session_state.messages:
             with st.expander(f"🔎 Path through the graph ({msg['elapsed']:.0f}s)"):
                 left, right = st.columns([3, 2])
                 with left:
-                    st.graphviz_chart(msg["dot"], use_container_width=True)
+                    st.graphviz_chart(msg["dot"], width='stretch')
                 with right:
                     st.code(msg["steps"], language="text")
 
@@ -178,7 +193,7 @@ if question := st.chat_input("Ask a question..."):
         attempts = 0
 
         diagram.graphviz_chart(query_dot(current="contextualize"),
-                               use_container_width=True)
+                               width='stretch')
         status.info(STEP_LABELS["contextualize"])
 
         t0 = time.time()
@@ -232,7 +247,7 @@ if question := st.chat_input("Ask a question..."):
                                      attempts=attempts)
                 diagram.graphviz_chart(
                     query_dot(upcoming, done, facts, route, failed),
-                    use_container_width=True)
+                    width='stretch')
                 status.info(STEP_LABELS.get(upcoming, "Working..."))
 
         elapsed = time.time() - t0
@@ -240,7 +255,7 @@ if question := st.chat_input("Ask a question..."):
         status.empty()
 
         final_dot = query_dot(None, done, facts, route, failed)
-        diagram.graphviz_chart(final_dot, use_container_width=True)
+        diagram.graphviz_chart(final_dot, width='stretch')
         steps_text = "\n".join(steps)
         step_log.code(steps_text, language="text")
 
