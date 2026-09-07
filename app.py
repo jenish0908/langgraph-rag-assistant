@@ -31,8 +31,8 @@ for _key in ("GROQ_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
     except Exception:
         pass          # no secrets.toml locally - that is fine, we fall back
 
-from graph_view import (fact_for, ingestion_html, next_node,  # noqa: E402
-                        output_html, query_html, styles)
+from graph_view import (fact_for, graph_svg, ingestion_html,  # noqa: E402
+                        next_node, output_html, query_html, styles)
 from llm import describe as describe_llm                       # noqa: E402
 from prompts import cite                                       # noqa: E402
 from step9_memory import (build_graph, get_resources,           # noqa: E402
@@ -107,6 +107,14 @@ drawer = st.container(key="steps_drawer")
 with drawer:
     st.markdown("#### ⚡ Pipeline")
     st.caption("What the graph did for the most recent question.")
+    live_graph = st.empty()
+    live_graph.markdown(
+        graph_svg(st.session_state.last_runs,
+                  route=st.session_state.last_route, finished=True),
+        unsafe_allow_html=True)
+
+    st.markdown("###### Step outputs")
+    st.caption("Click a step to see exactly what it produced.")
     live_flow = st.empty()
     live_flow.markdown(
         query_html(st.session_state.last_runs,
@@ -176,7 +184,10 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg.get("runs"):
             with st.expander(f"Steps for this answer ({msg['elapsed']:.0f}s)"):
-                st.markdown(query_html(msg["runs"], route=msg.get("route"),
+                st.markdown(styles(False) +
+                            graph_svg(msg["runs"], route=msg.get("route"),
+                                      finished=True) +
+                            query_html(msg["runs"], route=msg.get("route"),
                                        finished=True),
                             unsafe_allow_html=True)
 
@@ -194,7 +205,9 @@ if question := st.chat_input("Ask a question..."):
         t0 = time.time()
 
         def paint(current=None, finished=False):
-            """Redraw the drawer's graph. Safe whether it is open or shut."""
+            """Redraw the diagram and the step list. Safe open or shut."""
+            live_graph.markdown(graph_svg(runs, current, route, finished),
+                                unsafe_allow_html=True)
             live_flow.markdown(query_html(runs, current, route, finished),
                                unsafe_allow_html=True)
 

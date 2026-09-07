@@ -252,6 +252,17 @@ def styles(drawer_open: bool) -> str:
     font-size: .65rem; font-weight: 700; color: rgb(245,158,11);
 }}
 .gloop.idle {{ color: rgba(148,163,184,.55); font-weight: 500; }}
+
+/* ---------- the SVG diagram ---------- */
+.gsvg {{ width: 100%; height: auto; display: block; margin: .2rem 0 .5rem; }}
+.gsvg text {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }}
+.gpulse {{ animation: svgpulse 1.5s ease-in-out infinite; }}
+@keyframes svgpulse {{
+    0%, 100% {{ filter: drop-shadow(0 0 0 rgba(245,158,11,.55)); }}
+    50%      {{ filter: drop-shadow(0 0 7px rgba(245,158,11,.85)); }}
+}}
+.gsteps {{ margin-top: .3rem; }}
+.gsteps > .fstep {{ margin-bottom: .25rem; }}
 </style>
 """
 
@@ -427,13 +438,153 @@ def ingestion_html(current: str | None = None, done: set | None = None,
 
 
 # ---------------------------------------------------------------------------
-# QUERY FLOW
+# THE GRAPH DIAGRAM (SVG)
+# ---------------------------------------------------------------------------
+# Hand-placed coordinates. The graph's shape never changes, so a fixed layout
+# beats an auto-layout engine: it is stable frame to frame (nodes never jump
+# as state updates), it fits the drawer's width exactly, and it needs no
+# dependency. viewBox units; the SVG scales to whatever width it is given.
+NODE_XY = {
+    "contextualize": (240, 26),
+    "classify":      (240, 94),
+    "retrieve":      (170, 168),
+    "chat_reply":    (392, 168),
+    "grade_docs":    (170, 240),
+    "generate":      (62, 322),
+    "rewrite_query": (182, 322),
+    "no_answer":     (312, 322),
+}
+NODE_W, NODE_H = 100, 34
+SVG_W, SVG_H = 480, 380
+
+# (from, to, path, label, label x/y)
+EDGES = [
+    ("contextualize", "classify", "M240,43 L240,77", None, None),
+    ("classify", "retrieve",
+     "M232,111 C210,132 190,140 172,151", "search", (176, 132)),
+    ("classify", "chat_reply",
+     "M256,111 C300,134 350,140 384,151", "chat", (316, 132)),
+    ("retrieve", "grade_docs", "M170,185 L170,223", None, None),
+    ("grade_docs", "generate",
+     "M150,257 C120,278 86,292 66,305", "relevant", (78, 280)),
+    ("grade_docs", "rewrite_query",
+     "M174,257 C178,278 180,292 182,305", "none kept", (216, 283)),
+    ("grade_docs", "no_answer",
+     "M194,257 C240,280 286,296 306,305", "exhausted", (290, 275)),
+]
+
+# The cycle. Routed up the corridor between grade_docs (ends x=220) and
+# chat_reply (starts x=342) so it crosses nothing.
+LOOP_PATH = "M232,322 C268,314 272,236 254,200 C244,180 226,172 222,169"
+
+
+def _svg_node(node: str, state: str, detail: str, count: int) -> str:
+    accent = STATES[state][0]
+    x, y = NODE_XY[node]
+    left, top = x - NODE_W / 2, y - NODE_H / 2
+    dash = ' stroke-dasharray="4 3"' if state in ("pending", "skipped") else ""
+    op = ' opacity="0.45"' if state in ("pending", "skipped") else ""
+    pulse = ' class="gpulse"' if state == "running" else ""
+    badge = ""
+    if count > 1:
+        badge = (f'<circle cx="{left + NODE_W - 7}" cy="{top + 7}" r="8" '
+                 f'fill="rgb({accent})"/>'
+                 f'<text x="{left + NODE_W - 7}" y="{top + 10}" '
+                 f'text-anchor="middle" font-size="9" font-weight="700" '
+                 f'fill="#000">{count}</text>')
+    sub = (f'<text x="{x}" y="{y + 11}" text-anchor="middle" font-size="8.5" '
+           f'fill="rgb({accent})" opacity=".85">{_esc(detail[:22])}</text>'
+           if detail else "")
+    dy = -2 if detail else 4
+    return (
+        f'<g{op}>'
+        f'<rect x="{left}" y="{top}" width="{NODE_W}" height="{NODE_H}" '
+        f'rx="9" fill="rgba({accent},0.13)" stroke="rgb({accent})" '
+        f'stroke-width="{2 if state == "running" else 1.3}"{dash}{pulse}/>'
+        f'<text x="{x}" y="{y + dy}" text-anchor="middle" font-size="10.5" '
+        f'font-weight="600" fill="rgb({accent})" '
+        f'font-family="ui-monospace,Consolas,monospace">{_esc(node)}</text>'
+        f'{sub}{badge}</g>'
+    )
+
+
+def graph_svg(runs: dict | None = None, current: str | None = None,
+              route: str | None = None, finished: bool = False) -> str:
+    """Draw the whole graph as a node-link diagram, path highlighted."""
+    runs = runs or {}
+
+    def state_of(node: str) -> str:
+        if node == current:
+            return "running"
+        if node in runs:
+            return "failed" if node == "no_answer" else "done"
+        if route == "chat" and node in SEARCH_BRANCH:
+            return "skipped"
+        if route == "search" and node == "chat_reply":
+            return "skipped"
+        return "skipped" if finished else "pending"
+
+    def edge_live(a: str, b: str) -> bool:
+        """An edge is lit once its destination has been reached."""
+        return b in runs or b == current
+
+    parts = [
+        f'<svg viewBox="0 0 {SVG_W} {SVG_H}" class="gsvg" '
+        f'xmlns="http://www.w3.org/2000/svg">',
+        '<defs>'
+        '<marker id="ah" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" '
+        'markerHeight="6" orient="auto-start-reverse">'
+        '<path d="M0,0 L8,4 L0,8 z" fill="rgb(16,185,129)"/></marker>'
+        '<marker id="ahd" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" '
+        'markerHeight="6" orient="auto-start-reverse">'
+        '<path d="M0,0 L8,4 L0,8 z" fill="rgba(148,163,184,.55)"/></marker>'
+        '<marker id="ahl" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" '
+        'markerHeight="6" orient="auto-start-reverse">'
+        '<path d="M0,0 L8,4 L0,8 z" fill="rgb(245,158,11)"/></marker>'
+        '</defs>',
+    ]
+
+    # --- edges first, so nodes paint over their ends ---
+    for a, b, path, label, lxy in EDGES:
+        live = edge_live(a, b)
+        colour = "rgb(16,185,129)" if live else "rgba(148,163,184,.32)"
+        width = 2 if live else 1.2
+        marker = "ah" if live else "ahd"
+        parts.append(f'<path d="{path}" fill="none" stroke="{colour}" '
+                     f'stroke-width="{width}" marker-end="url(#{marker})"/>')
+        if label and lxy:
+            lx, ly = lxy
+            lc = "rgb(16,185,129)" if live else "rgba(148,163,184,.6)"
+            parts.append(f'<text x="{lx}" y="{ly}" text-anchor="middle" '
+                         f'font-size="8" fill="{lc}" '
+                         f'font-weight="{"700" if live else "400"}">'
+                         f'{_esc(label)}</text>')
+
+    # --- the cycle ---
+    fired = len(runs.get("retrieve", [])) > 1
+    lc = "rgb(245,158,11)" if fired else "rgba(148,163,184,.28)"
+    parts.append(f'<path d="{LOOP_PATH}" fill="none" stroke="{lc}" '
+                 f'stroke-width="{2 if fired else 1.2}" stroke-dasharray="5 4" '
+                 f'marker-end="url(#{"ahl" if fired else "ahd"})"/>')
+    parts.append(f'<text x="286" y="250" font-size="8" fill="{lc}" '
+                 f'font-weight="{"700" if fired else "400"}">retry</text>')
+
+    # --- nodes ---
+    for node in NODE_XY:
+        node_runs = runs.get(node, [])
+        detail = node_runs[-1].get("detail", "") if node_runs else ""
+        parts.append(_svg_node(node, state_of(node), detail, len(node_runs)))
+
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# QUERY FLOW  (the expandable per-step detail, shown under the diagram)
 # ---------------------------------------------------------------------------
 # The STATIC shape of the graph, in reading order.
 #   (node, depth, edge label that leads to it)
-# Depth expresses the branch structure: depth 1 hangs off classify's decision,
-# depth 2 off grade_docs'. This list is the single source of truth for the
-# picture - it mirrors build_graph() in step9_memory.py.
+# Mirrors build_graph() in step9_memory.py.
 GRAPH_LAYOUT = [
     ("contextualize", 0, None),
     ("classify", 0, None),
@@ -452,80 +603,37 @@ SEARCH_BRANCH = {"retrieve", "grade_docs", "generate", "rewrite_query",
 
 def query_html(runs: dict | None = None, current: str | None = None,
                route: str | None = None, finished: bool = False) -> str:
-    """Draw the WHOLE graph, with the path actually taken highlighted.
+    """The expandable per-step detail that sits UNDER the diagram.
 
-    runs:     node -> list of runs, each {"detail", "seconds", "output"}.
-              A list because retrieve and grade_docs execute more than once
-              when the retry cycle fires.
-    current:  the node executing right now (pulses).
-    route:    "search" / "chat" once classify has decided - the branch not
-              taken is dimmed.
-    finished: once the run is over, nodes that were never reached become
-              "skipped" rather than "pending", so a completed answer shows a
-              settled picture instead of one that looks still in progress.
-
-    Every node is ALWAYS drawn. That is the point: you can see the decisions
-    that were available, not just the ones that happened.
+    The SVG above already carries the structure and the highlighted path, so
+    this lists only the nodes that actually ran - in execution order (dicts
+    keep insertion order) - and exists to be clicked open for outputs.
     """
     runs = runs or {}
+    if not runs and not current:
+        return ('<div class="fdesc">Ask a question and the path will light '
+                'up here.</div>')
 
-    def state_of(node: str) -> str:
-        if node == current:
-            return "running"
-        if node in runs:
-            return "failed" if node == "no_answer" else "done"
-        # Branch not taken - dim it as soon as the router has decided.
-        if route == "chat" and node in SEARCH_BRANCH:
-            return "skipped"
-        if route == "search" and node == "chat_reply":
-            return "skipped"
-        return "skipped" if finished else "pending"
+    parts = ['<div class="gsteps">']
+    for node, node_runs in runs.items():
+        state = "failed" if node == "no_answer" else "done"
+        last = node_runs[-1]
+        seconds = sum(r.get("seconds", 0) or 0 for r in node_runs)
 
-    parts = ['<div class="gwrap">']
-
-    for node, depth, edge in GRAPH_LAYOUT:
-        state = state_of(node)
-        node_runs = runs.get(node, [])
-
-        if edge:
-            taken = "taken" if node_runs or node == current else ""
-            parts.append(f'<div class="gedge {taken}">&#8627; {_esc(edge)}</div>')
-
-        # Multiple runs are folded into one card with a ×N badge; the expanded
-        # panel then lists each attempt separately.
-        if node_runs:
-            last = node_runs[-1]
-            detail = last.get("detail", "")
-            seconds = sum(r.get("seconds", 0) or 0 for r in node_runs)
-            if len(node_runs) > 1:
-                output = "".join(
-                    f'<div class="frun"><div class="frunhead">'
-                    f'attempt {i}</div>{r.get("output", "")}</div>'
-                    for i, r in enumerate(node_runs, start=1))
-            else:
-                output = last.get("output", "")
+        if len(node_runs) > 1:
+            output = "".join(
+                f'<div class="frun"><div class="frunhead">attempt {i}</div>'
+                f'{r.get("output", "")}</div>'
+                for i, r in enumerate(node_runs, start=1))
+            detail = f'ran {len(node_runs)}x - {last.get("detail", "")}'
         else:
-            detail, seconds, output = "", None, ""
+            output = last.get("output", "")
+            detail = last.get("detail", "")
 
-        accent = STATES[state][0]
-        count = (f'<span class="gcount" style="--accent:{accent}">'
-                 f'&#215;{len(node_runs)}</span>' if len(node_runs) > 1 else "")
+        parts.append(_card(node, state, detail, seconds, output))
 
-        card = _card(node, state, detail, seconds, output)
-        if count:                       # slot the badge in beside the name
-            card = card.replace('</div><div class="fdesc">',
-                                f'{count}</div><div class="fdesc">', 1)
-
-        parts.append(f'<div class="grow d{depth}"><div class="grail"></div>'
-                     f'<div class="gbody">{card}</div></div>')
-
-        # The cycle, drawn under the node it returns from.
-        if node == "rewrite_query":
-            fired = len(runs.get("retrieve", [])) > 1
-            cls = "" if fired else "idle"
-            label = ("&#8635; loops back to retrieve" if fired
-                     else "&#8635; would loop back to retrieve")
-            parts.append(f'<div class="gloop {cls}">{label}</div>')
+    if current:
+        parts.append(_card(current, "running"))
 
     parts.append("</div>")
     return "".join(parts)
