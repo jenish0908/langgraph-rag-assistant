@@ -83,7 +83,6 @@ record = ingest_record()
 # Session state must exist before the drawer renders.
 st.session_state.setdefault("thread_id", f"web-{uuid.uuid4().hex[:8]}")
 st.session_state.setdefault("messages", [])
-st.session_state.setdefault("drawer_open", False)
 st.session_state.setdefault("last_runs", {})
 st.session_state.setdefault("last_route", None)
 
@@ -94,7 +93,7 @@ st.markdown(chat_css(), unsafe_allow_html=True)
 # render one at all. The two things it held that still matter are a "new
 # conversation" action (now the + button) and the documents/engine details
 # (now inside the steps drawer).
-head, plus, toggle = st.columns([6, 0.6, 1.5])
+head, plus = st.columns([8, 0.7])
 with head:
     st.title("📄 Document Assistant")
 with plus:
@@ -105,17 +104,10 @@ with plus:
         st.session_state.last_runs = {}
         st.session_state.last_route = None
         st.rerun()
-with toggle:
-    st.write("")
-    label = "✕  Hide steps" if st.session_state.drawer_open else "⚡  Show steps"
-    if st.button(label, width="stretch"):
-        st.session_state.drawer_open = not st.session_state.drawer_open
-        st.rerun()
 
-# --- The right-hand drawer -------------------------------------------------
-# ONE st.markdown owns the whole panel. It is always rendered; "closed" just
-# means translated off-screen by CSS, so live updates keep painting into it
-# and opening it mid-question shows the run already in progress.
+# --- The right-hand panel --------------------------------------------------
+# ONE st.markdown owns the whole panel, and it is always on screen. CSS offsets
+# the main content and the chat input so nothing hides underneath it.
 drawer_slot = st.empty()
 INGEST = {"current": None}
 SOURCES: list[str] = []      # filled once ingestion has run
@@ -128,7 +120,6 @@ def paint_drawer(runs=None, current=None, route=None, finished=False):
                     route if route is not None else st.session_state.last_route,
                     finished,
                     ingest={**record, "current": INGEST["current"]},
-                    is_open=st.session_state.drawer_open,
                     sources=SOURCES,
                     engine=describe_llm(),
                     thread_id=st.session_state.thread_id),
@@ -156,7 +147,7 @@ SOURCES = list_sources()
 paint_drawer(finished=True)
 
 st.caption("Ask about your documents. Follow-up questions work — "
-           "open **Show steps** to watch the graph run.")
+           "the panel on the right shows the graph as it runs.")
 
 # --- History ---------------------------------------------------------------
 for msg in st.session_state.messages:
@@ -164,7 +155,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg.get("runs"):
             with st.expander(f"Steps for this answer ({msg['elapsed']:.0f}s)"):
-                st.markdown(styles(False) +
+                st.markdown(styles() +
                             graph_svg(msg["runs"], route=msg.get("route"),
                                       finished=True) +
                             query_html(msg["runs"], route=msg.get("route"),

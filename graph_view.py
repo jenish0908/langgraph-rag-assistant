@@ -43,30 +43,35 @@ INGEST_STEPS = [
 # ---------------------------------------------------------------------------
 # CSS
 # ---------------------------------------------------------------------------
-def styles(drawer_open: bool) -> str:
-    """All CSS for the drawer and the flow cards.
+def styles() -> str:
+    """All CSS for the app.
 
     The drawer is a single div we own, rendered inside one st.markdown block
-    and pinned to the right with position:fixed.
+    and pinned to the right. It is ALWAYS open, so the main content and the
+    chat input are both offset to the left by its width - otherwise they sit
+    underneath it. Streamlit's own containers are the ones being offset:
+    .stMainBlockContainer for the page, .stBottomBlockContainer for the
+    fixed chat input.
 
-    Open/closed is a CSS transform rather than rendering/not-rendering the
-    content, so the panel slides instead of blinking.
+    Below 820px the panel is hidden and the chat takes the full width -
+    there is not room for both on a phone.
     """
-    shift = "0" if drawer_open else "105%"
-    shadow = "-18px 0 48px rgba(0,0,0,.28)" if drawer_open else "none"
-    return f"""
+    return """
 <style>
-/* ---------- the slide-in drawer ----------
+/* Panel width in one place - the offsets below are derived from it. */
+:root { --dw: 430px; }
+
+/* ---------- the always-open right panel ----------
    This is OUR div inside a single st.markdown block, not a Streamlit
-   container. The first attempt styled st.container(key=...) - the class name
-   was right, but its children are Streamlit's own nested block wrappers, and
-   re-parenting those into a fixed panel left the panel painting its
-   background with no visible content. Owning the whole subtree removes that
-   entire class of problem. */
-.ragdrawer {{
+   container. An earlier version styled st.container(key=...) - the class
+   name was right, but its children are Streamlit's own nested block
+   wrappers, and re-parenting those into a fixed panel left the panel
+   painting its background with no visible content. Owning the whole
+   subtree removes that entire class of problem. */
+.ragdrawer {
     position: fixed;
     top: 0; right: 0;
-    width: min(470px, 94vw);
+    width: var(--dw);
     height: 100vh;
     z-index: 999990;
     padding: 1.1rem 1.15rem 2rem 1.15rem;
@@ -74,211 +79,223 @@ def styles(drawer_open: bool) -> str:
     background: #050506;
     color: #e8e8ea;
     border-left: 1px solid rgba(148,163,184,.22);
-    box-shadow: {shadow};
-    transform: translateX({shift});
-    transition: transform .32s cubic-bezier(.4,0,.2,1), box-shadow .32s ease;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-}}
-.ragdrawer::-webkit-scrollbar {{ width: 8px; }}
-.ragdrawer::-webkit-scrollbar-thumb {{
+}
+.ragdrawer::-webkit-scrollbar { width: 8px; }
+.ragdrawer::-webkit-scrollbar-thumb {
     background: rgba(148,163,184,.4); border-radius: 4px;
-}}
-.dtitle {{ font-size: .95rem; font-weight: 700; margin: 0 0 .1rem; }}
-.dsub {{ font-size: .7rem; opacity: .55; margin: 0 0 .7rem; }}
-.dsec {{
+}
+
+/* Keep the app clear of the panel. */
+.stMainBlockContainer { padding-right: calc(var(--dw) + 2rem) !important; }
+.stBottomBlockContainer { padding-right: calc(var(--dw) + 2rem) !important; }
+
+@media (max-width: 1200px) { :root { --dw: 360px; } }
+
+/* Below this there is no room for both; the chat wins. */
+@media (max-width: 820px) {
+    .ragdrawer { display: none; }
+    .stMainBlockContainer, .stBottomBlockContainer {
+        padding-right: 1rem !important;
+    }
+}
+
+.dtitle { font-size: .95rem; font-weight: 700; margin: 0 0 .1rem; }
+.dsub { font-size: .7rem; opacity: .55; margin: 0 0 .7rem; }
+.dsec {
     font-size: .66rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: .06em; opacity: .5;
     margin: 1.1rem 0 .4rem; padding-top: .8rem;
     border-top: 1px solid rgba(148,163,184,.16);
-}}
-.dsec:first-of-type {{ border-top: 0; padding-top: 0; margin-top: .2rem; }}
-.dfile {{
+}
+.dsec:first-of-type { border-top: 0; padding-top: 0; margin-top: .2rem; }
+.dfile {
     font-family: ui-monospace, Consolas, monospace; font-size: .72rem;
     color: rgb(16,185,129); background: rgba(16,185,129,.09);
     border-radius: 6px; padding: .22rem .5rem; margin-bottom: .25rem;
-}}
+}
 
 /* ---------- flow cards ---------- */
-.flow {{ display: flex; flex-direction: column; gap: 0; }}
+.flow { display: flex; flex-direction: column; gap: 0; }
 
-.fnode {{
+.fnode {
     display: flex; align-items: flex-start; gap: .65rem;
     padding: .6rem .75rem;
     border: 1px solid rgba(var(--accent), .34);
     background: rgba(var(--accent), .075);
     border-radius: 11px;
-}}
-.fnode.is-running {{
+}
+.fnode.is-running {
     border-color: rgba(var(--accent), .75);
     animation: fpulse 1.5s ease-in-out infinite;
-}}
-.fnode.is-skipped, .fnode.is-pending {{ opacity: .5; border-style: dashed; }}
+}
+.fnode.is-skipped, .fnode.is-pending { opacity: .5; border-style: dashed; }
 
-@keyframes fpulse {{
-    0%, 100% {{ box-shadow: 0 0 0 0 rgba(var(--accent), .40); }}
-    50%      {{ box-shadow: 0 0 0 7px rgba(var(--accent), 0); }}
-}}
+@keyframes fpulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent), .40); }
+    50%      { box-shadow: 0 0 0 7px rgba(var(--accent), 0); }
+}
 
-.fglyph {{
+.fglyph {
     flex: 0 0 22px; height: 22px; line-height: 22px; text-align: center;
     border-radius: 50%; font-size: 11px; font-weight: 700;
     color: rgb(var(--accent));
     background: rgba(var(--accent), .16);
-}}
-.fbody {{ flex: 1 1 auto; min-width: 0; }}
-.fname {{
+}
+.fbody { flex: 1 1 auto; min-width: 0; }
+.fname {
     font-weight: 650; font-size: .84rem; letter-spacing: .01em;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-}}
-.fdesc {{ font-size: .71rem; opacity: .62; margin-top: .05rem; }}
-.fdetail {{
+}
+.fdesc { font-size: .71rem; opacity: .62; margin-top: .05rem; }
+.fdetail {
     font-size: .71rem; margin-top: .32rem;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     background: rgba(148,163,184,.13);
     padding: .2rem .42rem; border-radius: 5px;
     word-break: break-word;
-}}
-.ftime {{
+}
+.ftime {
     flex: 0 0 auto; font-size: .68rem; opacity: .55;
     font-variant-numeric: tabular-nums; padding-top: .15rem;
-}}
+}
 
 /* ---------- connectors ---------- */
-.fconn {{
+.fconn {
     width: 2px; height: 14px; margin-left: 1.42rem;
     background: linear-gradient(rgba(148,163,184,.55), rgba(148,163,184,.18));
-}}
-.floop {{
+}
+.floop {
     display: flex; align-items: center; gap: .4rem;
     margin: .25rem 0 .25rem .95rem;
     font-size: .68rem; font-weight: 650;
     color: rgb(245,158,11);
-}}
-.fbranch {{
+}
+.fbranch {
     display: flex; gap: .4rem; margin: .35rem 0 .35rem 1.9rem;
     font-size: .66rem; flex-wrap: wrap;
-}}
-.fpill {{
+}
+.fpill {
     padding: .12rem .5rem; border-radius: 999px;
     border: 1px solid rgba(148,163,184,.4); opacity: .45;
-}}
-.fpill.taken {{
+}
+.fpill.taken {
     border-color: rgba(16,185,129,.6);
     background: rgba(16,185,129,.13);
     color: rgb(16,185,129); opacity: 1; font-weight: 650;
-}}
+}
 
 /* ---------- ingestion strip ---------- */
-.istrip {{ display: flex; gap: .45rem; align-items: stretch; }}
-.istep {{
+.istrip { display: flex; gap: .45rem; align-items: stretch; }
+.istep {
     flex: 1 1 0; min-width: 0;
     border: 1px solid rgba(var(--accent), .34);
     background: rgba(var(--accent), .075);
     border-radius: 10px; padding: .5rem .6rem;
-}}
-.istep.is-running {{ animation: fpulse 1.5s ease-in-out infinite; }}
-.istep.is-pending {{ opacity: .5; border-style: dashed; }}
-.ihead {{ font-size: .74rem; font-weight: 650; }}
-.idesc {{ font-size: .66rem; opacity: .6; margin-top: .1rem; }}
-.ifact {{
+}
+.istep.is-running { animation: fpulse 1.5s ease-in-out infinite; }
+.istep.is-pending { opacity: .5; border-style: dashed; }
+.ihead { font-size: .74rem; font-weight: 650; }
+.idesc { font-size: .66rem; opacity: .6; margin-top: .1rem; }
+.ifact {
     font-size: .67rem; margin-top: .3rem; font-weight: 600;
     color: rgb(var(--accent));
     font-family: ui-monospace, Consolas, monospace;
-}}
-.iarrow {{ align-self: center; opacity: .35; font-size: .8rem; }}
+}
+.iarrow { align-self: center; opacity: .35; font-size: .8rem; }
 
 /* ---------- expandable step (<details>) ---------- */
-.fstep {{ border: 0; }}
-.fstep > summary {{ cursor: pointer; list-style: none; }}
-.fstep > summary::-webkit-details-marker {{ display: none; }}
-.fstep > summary:hover {{ border-color: rgba(var(--accent), .68); }}
-.fchev {{
+.fstep { border: 0; }
+.fstep > summary { cursor: pointer; list-style: none; }
+.fstep > summary::-webkit-details-marker { display: none; }
+.fstep > summary:hover { border-color: rgba(var(--accent), .68); }
+.fchev {
     flex: 0 0 auto; opacity: .5; font-size: .95rem; padding-top: .05rem;
     transition: transform .18s ease;
-}}
-.fstep[open] > summary .fchev {{ transform: rotate(90deg); }}
+}
+.fstep[open] > summary .fchev { transform: rotate(90deg); }
 
-.fout {{
+.fout {
     margin: .3rem 0 .1rem 1.05rem;
     padding: .6rem .75rem;
     border-left: 2px solid rgba(var(--accent), .45);
     background: rgba(148,163,184,.07);
     border-radius: 0 8px 8px 0;
     font-size: .71rem; line-height: 1.45;
-}}
-.fout b {{ display: block; margin: .45rem 0 .25rem; font-size: .69rem;
-           text-transform: uppercase; letter-spacing: .04em; opacity: .65; }}
-.fout b:first-child {{ margin-top: 0; }}
-.fkv {{ display: flex; gap: .5rem; margin: .16rem 0; }}
-.fk {{ flex: 0 0 84px; opacity: .55; }}
-.fv {{ flex: 1 1 auto; word-break: break-word; }}
-.fraw {{
+}
+.fout b { display: block; margin: .45rem 0 .25rem; font-size: .69rem;
+           text-transform: uppercase; letter-spacing: .04em; opacity: .65; }
+.fout b:first-child { margin-top: 0; }
+.fkv { display: flex; gap: .5rem; margin: .16rem 0; }
+.fk { flex: 0 0 84px; opacity: .55; }
+.fv { flex: 1 1 auto; word-break: break-word; }
+.fraw {
     background: rgba(148,163,184,.16); padding: .28rem .45rem;
     border-radius: 5px; font-family: ui-monospace, Consolas, monospace;
     word-break: break-word;
-}}
-.fnote {{ margin-top: .45rem; opacity: .5; font-style: italic;
-          font-size: .67rem; }}
-.fchunk {{
+}
+.fnote { margin-top: .45rem; opacity: .5; font-style: italic;
+          font-size: .67rem; }
+.fchunk {
     border-left: 2px solid rgba(148,163,184,.3);
     padding-left: .5rem; margin: .38rem 0;
-}}
-.fchead {{ font-family: ui-monospace, Consolas, monospace; font-size: .68rem; }}
-.fctext {{ opacity: .62; margin-top: .12rem; }}
-.fdim {{ opacity: .4; }}
-.fscore {{ color: rgb(16,185,129); font-weight: 700; }}
-.fverdict {{ margin: .16rem 0; font-family: ui-monospace, Consolas, monospace;
-             font-size: .68rem; }}
-.fkeep {{ color: rgb(16,185,129); font-weight: 700; }}
-.fdrop {{ color: rgb(239,68,68); font-weight: 700; opacity: .85; }}
-.fanswer {{
+}
+.fchead { font-family: ui-monospace, Consolas, monospace; font-size: .68rem; }
+.fctext { opacity: .62; margin-top: .12rem; }
+.fdim { opacity: .4; }
+.fscore { color: rgb(16,185,129); font-weight: 700; }
+.fverdict { margin: .16rem 0; font-family: ui-monospace, Consolas, monospace;
+             font-size: .68rem; }
+.fkeep { color: rgb(16,185,129); font-weight: 700; }
+.fdrop { color: rgb(239,68,68); font-weight: 700; opacity: .85; }
+.fanswer {
     background: rgba(16,185,129,.09); border-radius: 6px;
     padding: .4rem .5rem; line-height: 1.5;
-}}
-.frun {{ margin: .5rem 0 .2rem; padding-top: .35rem;
-         border-top: 1px dashed rgba(148,163,184,.25); }}
-.frun:first-child {{ border-top: 0; padding-top: 0; margin-top: 0; }}
-.frunhead {{ font-size: .66rem; font-weight: 700; opacity: .55;
-             text-transform: uppercase; letter-spacing: .04em; }}
+}
+.frun { margin: .5rem 0 .2rem; padding-top: .35rem;
+         border-top: 1px dashed rgba(148,163,184,.25); }
+.frun:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.frunhead { font-size: .66rem; font-weight: 700; opacity: .55;
+             text-transform: uppercase; letter-spacing: .04em; }
 
 /* ---------- graph structure ---------- */
-.gwrap {{ display: flex; flex-direction: column; gap: .1rem; }}
-.grow {{ display: flex; align-items: stretch; }}
-.grail {{
+.gwrap { display: flex; flex-direction: column; gap: .1rem; }
+.grow { display: flex; align-items: stretch; }
+.grail {
     flex: 0 0 auto; width: 0; border-left: 2px solid rgba(148,163,184,.22);
     margin-right: .55rem;
-}}
-.grow.d0 > .grail {{ display: none; }}
-.grow.d1 {{ padding-left: .45rem; }}
-.grow.d2 {{ padding-left: 1.35rem; }}
-.gbody {{ flex: 1 1 auto; min-width: 0; }}
-.gedge {{
+}
+.grow.d0 > .grail { display: none; }
+.grow.d1 { padding-left: .45rem; }
+.grow.d2 { padding-left: 1.35rem; }
+.gbody { flex: 1 1 auto; min-width: 0; }
+.gedge {
     font-size: .62rem; letter-spacing: .03em; text-transform: uppercase;
     opacity: .5; margin: .3rem 0 .18rem .1rem;
-}}
-.gedge.taken {{ color: rgb(16,185,129); opacity: .95; font-weight: 700; }}
-.gcount {{
+}
+.gedge.taken { color: rgb(16,185,129); opacity: .95; font-weight: 700; }
+.gcount {
     display: inline-block; margin-left: .35rem; padding: 0 .32rem;
     border-radius: 999px; font-size: .6rem; font-weight: 700;
     background: rgba(var(--accent), .2); color: rgb(var(--accent));
-}}
-.gloop {{
+}
+.gloop {
     display: flex; align-items: center; gap: .35rem;
     margin: .25rem 0 .1rem 1.35rem;
     font-size: .65rem; font-weight: 700; color: rgb(245,158,11);
-}}
-.gloop.idle {{ color: rgba(148,163,184,.55); font-weight: 500; }}
+}
+.gloop.idle { color: rgba(148,163,184,.55); font-weight: 500; }
 
 /* ---------- the SVG diagram ---------- */
-.gsvg {{ width: 100%; height: auto; display: block; margin: .2rem 0 .5rem; }}
-.gsvg text {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }}
-.gpulse {{ animation: svgpulse 1.5s ease-in-out infinite; }}
-@keyframes svgpulse {{
-    0%, 100% {{ filter: drop-shadow(0 0 0 rgba(245,158,11,.55)); }}
-    50%      {{ filter: drop-shadow(0 0 7px rgba(245,158,11,.85)); }}
-}}
-.gsteps {{ margin-top: .3rem; }}
-.gsteps > .fstep {{ margin-bottom: .25rem; }}
+.gsvg { width: 100%; height: auto; display: block; margin: .2rem 0 .5rem; }
+.gsvg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.gpulse { animation: svgpulse 1.5s ease-in-out infinite; }
+@keyframes svgpulse {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(245,158,11,.55)); }
+    50%      { filter: drop-shadow(0 0 7px rgba(245,158,11,.85)); }
+}
+.gsteps { margin-top: .3rem; }
+.gsteps > .fstep { margin-bottom: .25rem; }
 </style>
 """
 
@@ -718,7 +735,7 @@ def next_node(node: str, update: dict, kept_total: int = 0,
 # ---------------------------------------------------------------------------
 def drawer_html(runs: dict | None = None, current: str | None = None,
                 route: str | None = None, finished: bool = False,
-                ingest: dict | None = None, is_open: bool = False,
+                ingest: dict | None = None,
                 sources: list | None = None, engine: str = "",
                 thread_id: str = "") -> str:
     """Everything in the panel: styles, diagram, step outputs, ingestion.
@@ -731,7 +748,7 @@ def drawer_html(runs: dict | None = None, current: str | None = None,
     seconds = ingest.get("seconds", 0.0)
 
     return (
-        styles(is_open)
+        styles()
         + '<div class="ragdrawer">'
         + '<div class="dtitle">Pipeline</div>'
         + '<div class="dsub">What the graph did for the latest question.</div>'
