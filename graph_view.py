@@ -739,3 +739,50 @@ def drawer_html(runs: dict | None = None, current: str | None = None,
           'Embedding is ~90% of it.</div>'
         + '</div>'
     )
+
+
+# ---------------------------------------------------------------------------
+# CHAT BUBBLES
+# ---------------------------------------------------------------------------
+def chat_css() -> str:
+    """Assistant on the left, you on the right.
+
+    Streamlit renders every chat message identically left-aligned. We flip the
+    user's by selecting on the avatar Streamlit puts inside each message:
+    `.stChatMessage:has(.stChatMessageAvatarUser)`. The :has() parent selector
+    is what makes this possible without wrapping every message ourselves -
+    supported in all current browsers.
+
+    Class names verified against the installed Streamlit bundle rather than
+    assumed: stChatMessage, stChatMessageAvatarUser,
+    stChatMessageAvatarAssistant, stChatMessageContent.
+    """
+    return """
+<style>
+/* --- your messages: right --- */
+.stChatMessage:has(.stChatMessageAvatarUser) {
+    flex-direction: row-reverse;
+    margin-left: auto;
+    margin-right: 0;
+    max-width: 78%;
+    background: rgba(16,185,129,.10);
+    border: 1px solid rgba(16,185,129,.22);
+    border-radius: 16px 16px 4px 16px;
+    padding: .35rem .75rem;
+}
+.stChatMessage:has(.stChatMessageAvatarUser) .stChatMessageContent {
+    text-align: right;
+}
+
+/* --- the assistant: left --- */
+.stChatMessage:has(.stChatMessageAvatarAssistant) {
+    margin-right: auto;
+    margin-left: 0;
+    max-width: 88%;
+    background: rgba(148,163,184,.07);
+    border: 1px solid rgba(148,163,184,.16);
+    border-radius: 16px 16px 16px 4px;
+    padding: .35rem .75rem;
+}
+</style>
+"""

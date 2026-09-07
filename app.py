@@ -31,8 +31,9 @@ for _key in ("GROQ_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
     except Exception:
         pass          # no secrets.toml locally - that is fine, we fall back
 
-from graph_view import (drawer_html, fact_for, graph_svg,  # noqa: E402
-                        next_node, output_html, query_html, styles)
+from graph_view import (chat_css, drawer_html, fact_for,  # noqa: E402
+                        graph_svg, next_node, output_html, query_html,
+                        styles)
 from llm import describe as describe_llm                       # noqa: E402
 from prompts import cite                                       # noqa: E402
 from step9_memory import (build_graph, get_resources,           # noqa: E402
@@ -85,6 +86,8 @@ st.session_state.setdefault("messages", [])
 st.session_state.setdefault("drawer_open", False)
 st.session_state.setdefault("last_runs", {})
 st.session_state.setdefault("last_route", None)
+
+st.markdown(chat_css(), unsafe_allow_html=True)
 
 # --- Header + the drawer toggle -------------------------------------------
 head, toggle = st.columns([5, 1])
