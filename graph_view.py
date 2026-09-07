@@ -68,8 +68,11 @@ def styles(drawer_open: bool) -> str:
     z-index: 9990;
     padding: 3.2rem 1.15rem 1.5rem 1.15rem;
     overflow-y: auto;
-    background: var(--background-color, #ffffff);
-    border-left: 1px solid rgba(148,163,184,.30);
+    /* Explicit black rather than var(--background-color): the drawer is
+       position:fixed and sits outside the normal flow, so it does not
+       inherit the canvas colour reliably. */
+    background: #000000;
+    border-left: 1px solid rgba(148,163,184,.22);
     box-shadow: {shadow};
     transform: translateX({shift});
     transition: transform .32s cubic-bezier(.4,0,.2,1), box-shadow .32s ease;

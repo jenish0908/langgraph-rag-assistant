@@ -1,3 +1,12 @@
+[theme]
+# Black background throughout.
+base = "dark"
+backgroundColor = "#000000"          # main canvas
+secondaryBackgroundColor = "#0e0e11" # sidebar, code blocks, expanders
+textColor = "#e8e8ea"
+primaryColor = "#10b981"             # emerald - matches the "done" state
+                                     # in the steps drawer
+
 [server]
 # Uploaded-file cap; we don't accept uploads yet, so keep it small.
 maxUploadSize = 10
