@@ -170,6 +170,88 @@ def styles(drawer_open: bool) -> str:
     font-family: ui-monospace, Consolas, monospace;
 }}
 .iarrow {{ align-self: center; opacity: .35; font-size: .8rem; }}
+
+/* ---------- expandable step (<details>) ---------- */
+.fstep {{ border: 0; }}
+.fstep > summary {{ cursor: pointer; list-style: none; }}
+.fstep > summary::-webkit-details-marker {{ display: none; }}
+.fstep > summary:hover {{ border-color: rgba(var(--accent), .68); }}
+.fchev {{
+    flex: 0 0 auto; opacity: .5; font-size: .95rem; padding-top: .05rem;
+    transition: transform .18s ease;
+}}
+.fstep[open] > summary .fchev {{ transform: rotate(90deg); }}
+
+.fout {{
+    margin: .3rem 0 .1rem 1.05rem;
+    padding: .6rem .75rem;
+    border-left: 2px solid rgba(var(--accent), .45);
+    background: rgba(148,163,184,.07);
+    border-radius: 0 8px 8px 0;
+    font-size: .71rem; line-height: 1.45;
+}}
+.fout b {{ display: block; margin: .45rem 0 .25rem; font-size: .69rem;
+           text-transform: uppercase; letter-spacing: .04em; opacity: .65; }}
+.fout b:first-child {{ margin-top: 0; }}
+.fkv {{ display: flex; gap: .5rem; margin: .16rem 0; }}
+.fk {{ flex: 0 0 84px; opacity: .55; }}
+.fv {{ flex: 1 1 auto; word-break: break-word; }}
+.fraw {{
+    background: rgba(148,163,184,.16); padding: .28rem .45rem;
+    border-radius: 5px; font-family: ui-monospace, Consolas, monospace;
+    word-break: break-word;
+}}
+.fnote {{ margin-top: .45rem; opacity: .5; font-style: italic;
+          font-size: .67rem; }}
+.fchunk {{
+    border-left: 2px solid rgba(148,163,184,.3);
+    padding-left: .5rem; margin: .38rem 0;
+}}
+.fchead {{ font-family: ui-monospace, Consolas, monospace; font-size: .68rem; }}
+.fctext {{ opacity: .62; margin-top: .12rem; }}
+.fdim {{ opacity: .4; }}
+.fscore {{ color: rgb(16,185,129); font-weight: 700; }}
+.fverdict {{ margin: .16rem 0; font-family: ui-monospace, Consolas, monospace;
+             font-size: .68rem; }}
+.fkeep {{ color: rgb(16,185,129); font-weight: 700; }}
+.fdrop {{ color: rgb(239,68,68); font-weight: 700; opacity: .85; }}
+.fanswer {{
+    background: rgba(16,185,129,.09); border-radius: 6px;
+    padding: .4rem .5rem; line-height: 1.5;
+}}
+.frun {{ margin: .5rem 0 .2rem; padding-top: .35rem;
+         border-top: 1px dashed rgba(148,163,184,.25); }}
+.frun:first-child {{ border-top: 0; padding-top: 0; margin-top: 0; }}
+.frunhead {{ font-size: .66rem; font-weight: 700; opacity: .55;
+             text-transform: uppercase; letter-spacing: .04em; }}
+
+/* ---------- graph structure ---------- */
+.gwrap {{ display: flex; flex-direction: column; gap: .1rem; }}
+.grow {{ display: flex; align-items: stretch; }}
+.grail {{
+    flex: 0 0 auto; width: 0; border-left: 2px solid rgba(148,163,184,.22);
+    margin-right: .55rem;
+}}
+.grow.d0 > .grail {{ display: none; }}
+.grow.d1 {{ padding-left: .45rem; }}
+.grow.d2 {{ padding-left: 1.35rem; }}
+.gbody {{ flex: 1 1 auto; min-width: 0; }}
+.gedge {{
+    font-size: .62rem; letter-spacing: .03em; text-transform: uppercase;
+    opacity: .5; margin: .3rem 0 .18rem .1rem;
+}}
+.gedge.taken {{ color: rgb(16,185,129); opacity: .95; font-weight: 700; }}
+.gcount {{
+    display: inline-block; margin-left: .35rem; padding: 0 .32rem;
+    border-radius: 999px; font-size: .6rem; font-weight: 700;
+    background: rgba(var(--accent), .2); color: rgb(var(--accent));
+}}
+.gloop {{
+    display: flex; align-items: center; gap: .35rem;
+    margin: .25rem 0 .1rem 1.35rem;
+    font-size: .65rem; font-weight: 700; color: rgb(245,158,11);
+}}
+.gloop.idle {{ color: rgba(148,163,184,.55); font-weight: 500; }}
 </style>
 """
 
@@ -180,19 +262,143 @@ def _esc(text) -> str:
 
 
 def _card(node: str, state: str, detail: str = "",
-          seconds: float | None = None) -> str:
+          seconds: float | None = None, output: str = "") -> str:
+    """One step.
+
+    With `output`, the card becomes a native <details> disclosure: clicking it
+    reveals what that step actually produced. <details> is used rather than
+    st.expander deliberately - it toggles in the browser with no Streamlit
+    rerun, so opening a step mid-question cannot disturb the streaming loop.
+    """
     accent, glyph = STATES[state]
     time_html = (f'<div class="ftime">{seconds:.1f}s</div>'
                  if seconds is not None else "")
     detail_html = f'<div class="fdetail">{_esc(detail)}</div>' if detail else ""
-    return (
-        f'<div class="fnode is-{state}" style="--accent:{accent}">'
+    chevron = '<div class="fchev">&#8250;</div>' if output else ""
+
+    inner = (
         f'<div class="fglyph">{glyph}</div>'
         f'<div class="fbody">'
         f'<div class="fname">{_esc(node)}</div>'
         f'<div class="fdesc">{_esc(NODE_DESC.get(node, ""))}</div>'
-        f'{detail_html}</div>{time_html}</div>'
+        f'{detail_html}</div>{time_html}{chevron}'
     )
+
+    if not output:
+        return (f'<div class="fnode is-{state}" style="--accent:{accent}">'
+                f'{inner}</div>')
+
+    return (
+        f'<details class="fstep" style="--accent:{accent}">'
+        f'<summary class="fnode is-{state}">{inner}</summary>'
+        f'<div class="fout">{output}</div>'
+        f'</details>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# WHAT EACH STEP PRODUCED  (the expanded view)
+# ---------------------------------------------------------------------------
+def _kv(key: str, value) -> str:
+    return (f'<div class="fkv"><div class="fk">{_esc(key)}</div>'
+            f'<div class="fv">{_esc(value)}</div></div>')
+
+
+def _raw(text: str) -> str:
+    return f'<div class="fraw">{_esc(text)}</div>'
+
+
+def output_html(node: str, update: dict, tev: dict | None = None,
+                question: str = "") -> str:
+    """Build the expanded 'what did this step produce' panel.
+
+    Two sources, because neither alone is enough:
+      * `update` - what the node returned into graph state (Documents with
+        their text, the answer)
+      * `tev` - the matching trace_log event, which carries the things that
+        never reach state: similarity scores, the grader's RAW reply, token
+        counts
+    """
+    tev = tev or {}
+    p: list[str] = []
+
+    if node == "contextualize":
+        p.append(_kv("you typed", question))
+        p.append(_kv("searched as", update.get("standalone_question", "")))
+        p.append(_kv("history", f"{tev.get('history_messages', 0)} messages"))
+        if not tev.get("rewritten"):
+            p.append('<div class="fnote">Already self-contained - no rewrite '
+                     'needed.</div>')
+
+    elif node == "classify":
+        p.append("<b>Raw model reply</b>")
+        p.append(_raw(tev.get("raw", "?")))
+        p.append(_kv("decision", update.get("route", "")))
+        p.append('<div class="fnote">"search" runs retrieval; "chat" skips '
+                 'the documents entirely.</div>')
+
+    elif node == "retrieve":
+        p.append(_kv("query used", tev.get("query", "")))
+        scores = {f"{r['source']}#{r['chunk_id']}": r["score"]
+                  for r in tev.get("results", [])}
+        p.append(f"<b>{len(update.get('documents', []))} nearest chunks</b>")
+        for d in update.get("documents", []):
+            label = f"{d.metadata['source']}#{d.metadata['chunk_id']}"
+            score = scores.get(label)
+            score_html = (f'<span class="fscore">{score:.3f}</span>'
+                          if score is not None else "")
+            body = d.page_content.strip().replace("\n", " ")[:320]
+            p.append(f'<div class="fchunk"><div class="fchead">{_esc(label)} '
+                     f'{score_html} <span class="fdim">'
+                     f'{len(d.page_content)} chars</span></div>'
+                     f'<div class="fctext">{_esc(body)}...</div></div>')
+        p.append('<div class="fnote">Score is cosine similarity: 1.0 is '
+                 'identical meaning, ~0.5 is weakly related.</div>')
+
+    elif node == "grade_docs":
+        p.append("<b>Raw model reply</b>")
+        p.append(_raw(tev.get("raw", "?")))
+        p.append(f"<b>Verdicts &mdash; kept {tev.get('kept', '?')}"
+                 f"/{tev.get('total', '?')}</b>")
+        for v in tev.get("verdicts", []):
+            keep = v["keep"]
+            cls = "fkeep" if keep else "fdrop"
+            word = "KEEP" if keep else "drop"
+            p.append(f'<div class="fverdict"><span class="{cls}">{word}</span>'
+                     f' {_esc(v["source"])}#{v["chunk_id"]}</div>')
+        p.append('<div class="fnote">Dropped chunks are never shown to the '
+                 'answering model - that is what stops it inventing an '
+                 'answer from near-miss text.</div>')
+
+    elif node == "rewrite_query":
+        p.append(_kv("failed query", tev.get("previous_query", "")))
+        p.append(_kv("new query", update.get("question", "")))
+        tried = tev.get("tried", [])
+        if tried:
+            p.append("<b>Already tried</b>")
+            for t in tried:
+                p.append(f'<div class="fchunk">{_esc(t)}</div>')
+        p.append('<div class="fnote">The graph now loops back to retrieve '
+                 'with this new wording.</div>')
+
+    elif node in ("generate", "chat_reply"):
+        used = tev.get("chunks_used")
+        if used:
+            p.append(_kv("built from", ", ".join(used)))
+        if tev.get("prompt_tokens"):
+            p.append(_kv("tokens", f"{tev['prompt_tokens']} in / "
+                                   f"{tev.get('output_tokens', '?')} out"))
+        p.append("<b>Answer</b>")
+        p.append(f'<div class="fanswer">{_esc(update.get("answer", ""))}</div>')
+
+    elif node == "no_answer":
+        p.append(_kv("attempts", tev.get("attempts", "?")))
+        p.append('<div class="fnote">Every retrieved chunk was rejected by '
+                 'the grader on every attempt, so the model was never asked '
+                 'to answer. It cannot hallucinate what it was not asked.'
+                 '</div>')
+
+    return "".join(p)
 
 
 # ---------------------------------------------------------------------------
@@ -223,51 +429,103 @@ def ingestion_html(current: str | None = None, done: set | None = None,
 # ---------------------------------------------------------------------------
 # QUERY FLOW
 # ---------------------------------------------------------------------------
-def query_html(events: list[dict] | None = None, current: str | None = None,
-               route: str | None = None) -> str:
-    """Render one question's run.
+# The STATIC shape of the graph, in reading order.
+#   (node, depth, edge label that leads to it)
+# Depth expresses the branch structure: depth 1 hangs off classify's decision,
+# depth 2 off grade_docs'. This list is the single source of truth for the
+# picture - it mirrors build_graph() in step9_memory.py.
+GRAPH_LAYOUT = [
+    ("contextualize", 0, None),
+    ("classify", 0, None),
+    ("chat_reply", 1, "chat"),
+    ("retrieve", 1, "search"),
+    ("grade_docs", 1, None),
+    ("generate", 2, "relevant"),
+    ("rewrite_query", 2, "nothing kept"),
+    ("no_answer", 2, "attempts exhausted"),
+]
 
-    events:  nodes that have ALREADY finished, in order, each
-             {"node", "detail", "seconds"}
-    current: the node running right now - drawn pulsing at the end
-    route:   "search" / "chat" once known - draws the branch pills
+# Which nodes belong to which branch out of classify.
+SEARCH_BRANCH = {"retrieve", "grade_docs", "generate", "rewrite_query",
+                 "no_answer"}
 
-    Rendering the real execution ORDER rather than the static graph shape is
-    what makes a retry legible: retrieve and grade_docs simply appear twice,
-    with a loop marker between the laps.
+
+def query_html(runs: dict | None = None, current: str | None = None,
+               route: str | None = None, finished: bool = False) -> str:
+    """Draw the WHOLE graph, with the path actually taken highlighted.
+
+    runs:     node -> list of runs, each {"detail", "seconds", "output"}.
+              A list because retrieve and grade_docs execute more than once
+              when the retry cycle fires.
+    current:  the node executing right now (pulses).
+    route:    "search" / "chat" once classify has decided - the branch not
+              taken is dimmed.
+    finished: once the run is over, nodes that were never reached become
+              "skipped" rather than "pending", so a completed answer shows a
+              settled picture instead of one that looks still in progress.
+
+    Every node is ALWAYS drawn. That is the point: you can see the decisions
+    that were available, not just the ones that happened.
     """
-    events = events or []
-    if not events and not current:
-        return '<div class="fdesc">Nothing has run yet.</div>'
+    runs = runs or {}
 
-    parts = ['<div class="flow">']
-    prev = None
-    for i, ev in enumerate(events):
-        node = ev["node"]
-        if node == "retrieve" and prev == "rewrite_query":
-            parts.append('<div class="floop">&#8635; retry &mdash; '
-                         'back to retrieve</div>')
-        elif i:
-            parts.append('<div class="fconn"></div>')
+    def state_of(node: str) -> str:
+        if node == current:
+            return "running"
+        if node in runs:
+            return "failed" if node == "no_answer" else "done"
+        # Branch not taken - dim it as soon as the router has decided.
+        if route == "chat" and node in SEARCH_BRANCH:
+            return "skipped"
+        if route == "search" and node == "chat_reply":
+            return "skipped"
+        return "skipped" if finished else "pending"
 
-        state = "failed" if node == "no_answer" else "done"
-        parts.append(_card(node, state, ev.get("detail", ""),
-                           ev.get("seconds")))
+    parts = ['<div class="gwrap">']
 
-        if node == "classify" and route:
-            search_cls = "taken" if route == "search" else ""
-            chat_cls = "taken" if route == "chat" else ""
-            parts.append(
-                '<div class="fbranch">'
-                f'<span class="fpill {search_cls}">search the documents</span>'
-                f'<span class="fpill {chat_cls}">reply directly</span></div>'
-            )
-        prev = node
+    for node, depth, edge in GRAPH_LAYOUT:
+        state = state_of(node)
+        node_runs = runs.get(node, [])
 
-    if current:
-        if events:
-            parts.append('<div class="fconn"></div>')
-        parts.append(_card(current, "running"))
+        if edge:
+            taken = "taken" if node_runs or node == current else ""
+            parts.append(f'<div class="gedge {taken}">&#8627; {_esc(edge)}</div>')
+
+        # Multiple runs are folded into one card with a ×N badge; the expanded
+        # panel then lists each attempt separately.
+        if node_runs:
+            last = node_runs[-1]
+            detail = last.get("detail", "")
+            seconds = sum(r.get("seconds", 0) or 0 for r in node_runs)
+            if len(node_runs) > 1:
+                output = "".join(
+                    f'<div class="frun"><div class="frunhead">'
+                    f'attempt {i}</div>{r.get("output", "")}</div>'
+                    for i, r in enumerate(node_runs, start=1))
+            else:
+                output = last.get("output", "")
+        else:
+            detail, seconds, output = "", None, ""
+
+        accent = STATES[state][0]
+        count = (f'<span class="gcount" style="--accent:{accent}">'
+                 f'&#215;{len(node_runs)}</span>' if len(node_runs) > 1 else "")
+
+        card = _card(node, state, detail, seconds, output)
+        if count:                       # slot the badge in beside the name
+            card = card.replace('</div><div class="fdesc">',
+                                f'{count}</div><div class="fdesc">', 1)
+
+        parts.append(f'<div class="grow d{depth}"><div class="grail"></div>'
+                     f'<div class="gbody">{card}</div></div>')
+
+        # The cycle, drawn under the node it returns from.
+        if node == "rewrite_query":
+            fired = len(runs.get("retrieve", [])) > 1
+            cls = "" if fired else "idle"
+            label = ("&#8635; loops back to retrieve" if fired
+                     else "&#8635; would loop back to retrieve")
+            parts.append(f'<div class="gloop {cls}">{label}</div>')
 
     parts.append("</div>")
     return "".join(parts)

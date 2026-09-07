@@ -32,7 +32,7 @@ for _key in ("GROQ_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
         pass          # no secrets.toml locally - that is fine, we fall back
 
 from graph_view import (fact_for, ingestion_html, next_node,  # noqa: E402
-                        query_html, styles)
+                        output_html, query_html, styles)
 from llm import describe as describe_llm                       # noqa: E402
 from prompts import cite                                       # noqa: E402
 from step9_memory import (build_graph, get_resources,           # noqa: E402
@@ -83,7 +83,7 @@ record = ingest_record()
 st.session_state.setdefault("thread_id", f"web-{uuid.uuid4().hex[:8]}")
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("drawer_open", False)
-st.session_state.setdefault("last_events", [])
+st.session_state.setdefault("last_runs", {})
 st.session_state.setdefault("last_route", None)
 
 st.markdown(styles(st.session_state.drawer_open), unsafe_allow_html=True)
@@ -109,8 +109,9 @@ with drawer:
     st.caption("What the graph did for the most recent question.")
     live_flow = st.empty()
     live_flow.markdown(
-        query_html(st.session_state.last_events,
-                   route=st.session_state.last_route),
+        query_html(st.session_state.last_runs,
+                   route=st.session_state.last_route,
+                   finished=True),
         unsafe_allow_html=True)
 
     st.divider()
@@ -164,7 +165,7 @@ with st.sidebar:
     if st.button("New conversation", width="stretch"):
         st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
         st.session_state.messages = []
-        st.session_state.last_events = []
+        st.session_state.last_runs = {}
         st.rerun()
 
 st.caption("Ask about the documents in the sidebar. Follow-up questions work.")
@@ -173,9 +174,10 @@ st.caption("Ask about the documents in the sidebar. Follow-up questions work.")
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg.get("events"):
+        if msg.get("runs"):
             with st.expander(f"Steps for this answer ({msg['elapsed']:.0f}s)"):
-                st.markdown(query_html(msg["events"], route=msg.get("route")),
+                st.markdown(query_html(msg["runs"], route=msg.get("route"),
+                                       finished=True),
                             unsafe_allow_html=True)
 
 # --- New message ----------------------------------------------------------
@@ -187,13 +189,13 @@ if question := st.chat_input("Ask a question..."):
     with st.chat_message("assistant"):
         status = st.empty()
 
-        events, route, answer, used_docs = [], None, "", []
+        runs, route, answer, used_docs = {}, None, "", []
         attempts = 0
         t0 = time.time()
 
-        def paint(current=None):
-            """Redraw the drawer's flow. Safe whether it is open or shut."""
-            live_flow.markdown(query_html(events, current, route),
+        def paint(current=None, finished=False):
+            """Redraw the drawer's graph. Safe whether it is open or shut."""
+            live_flow.markdown(query_html(runs, current, route, finished),
                                unsafe_allow_html=True)
 
         paint("contextualize")
@@ -225,8 +227,17 @@ if question := st.chat_input("Ask a question..."):
                 elif node in ("generate", "chat_reply", "no_answer"):
                     answer = update.get("answer", answer)
 
-                events.append({"node": node, "detail": detail,
-                               "seconds": elapsed})
+                # The matching trace_log event carries what never reaches
+                # graph state: similarity scores, the grader's raw reply,
+                # token counts. Pair it with the state update to build the
+                # expandable "what did this step produce" panel.
+                tev = next((e for e in reversed(qtrace.events)
+                            if e.get("node") == node), {})
+                runs.setdefault(node, []).append({
+                    "detail": detail,
+                    "seconds": tev.get("seconds", elapsed),
+                    "output": output_html(node, update, tev, question),
+                })
 
                 upcoming = next_node(node, update, kept_total=len(used_docs),
                                      attempts=attempts)
@@ -236,9 +247,9 @@ if question := st.chat_input("Ask a question..."):
         elapsed = time.time() - t0
         qtrace.finish(answer)
         status.empty()
-        paint()                                   # final, nothing running
+        paint(finished=True)                      # nothing running any more
 
-        st.session_state.last_events = events
+        st.session_state.last_runs = runs
         st.session_state.last_route = route
 
         st.markdown(answer)
@@ -256,5 +267,5 @@ if question := st.chat_input("Ask a question..."):
 
     st.session_state.messages.append({
         "role": "assistant", "content": answer,
-        "events": events, "route": route, "elapsed": elapsed,
+        "runs": runs, "route": route, "elapsed": elapsed,
     })
