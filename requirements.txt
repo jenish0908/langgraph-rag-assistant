@@ -21,7 +21,4 @@ fastembed
 pypdf                         # extract text from PDFs
 
 # --- The web UI ---
-streamlit                     # chat interface with live graph progress
-graphviz                      # DOT strings for the live pipeline diagrams
-                              # (pure python - Streamlit renders them client-side,
-                              #  no Graphviz system binary required)
+streamlit                     # chat interface + the live pipeline drawer

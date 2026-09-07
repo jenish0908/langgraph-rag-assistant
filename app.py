@@ -1,18 +1,16 @@
 """
-The web app - with live graph visualisation.
+The web app.
 
     streamlit run app.py
 
-Two diagrams show where the system is at any moment:
+The chat is the main view. A "Show steps" button slides a panel in from the
+right showing exactly what the graph did for the current question - every node
+in execution order, what it produced, and how long it took.
 
-  1. INGESTION, once at startup:  load -> chunk -> embed -> store
-  2. QUERY, per question:         the 8-node graph, lighting up as it runs
-
-Why this matters beyond looking nice: on CPU a question takes 20-90 seconds.
-A UI that shows nothing for a minute feels broken. Watching the actual node
-light up turns dead time into visible work - and it is the best debugging
-view you have, because you see the path the graph took and what each step
-produced.
+Why that matters beyond looking nice: on CPU a question takes 20-90 seconds.
+A UI that shows nothing for a minute feels broken. The panel also doubles as
+the best debugging view there is - you can see whether a bad answer came from
+retrieval or from grading, without opening a log.
 """
 
 import os
@@ -33,18 +31,17 @@ for _key in ("GROQ_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
     except Exception:
         pass          # no secrets.toml locally - that is fine, we fall back
 
-from graph_view import (fact_for, ingestion_dot, next_node,  # noqa: E402
-                        query_dot)
-from llm import describe as describe_llm                      # noqa: E402
-from prompts import cite                                      # noqa: E402
-from step9_memory import (build_graph, get_resources,          # noqa: E402
+from graph_view import (fact_for, ingestion_html, next_node,  # noqa: E402
+                        query_html, styles)
+from llm import describe as describe_llm                       # noqa: E402
+from prompts import cite                                       # noqa: E402
+from step9_memory import (build_graph, get_resources,           # noqa: E402
                           list_sources, thread, turn_input)
-from trace_log import TEXT_LOG, start_trace                    # noqa: E402
+from trace_log import TEXT_LOG, start_trace                     # noqa: E402
 
 st.set_page_config(page_title="Document Assistant", page_icon="📄",
                    layout="wide")
 
-# What to show in the status line while each node runs.
 STEP_LABELS = {
     "contextualize": "Reading the conversation so far...",
     "classify": "Deciding whether to search the documents...",
@@ -58,22 +55,17 @@ STEP_LABELS = {
 
 
 # ---------------------------------------------------------------------------
-# STARTUP: build everything once, drawing the ingestion pipeline as it goes
+# STARTUP
 # ---------------------------------------------------------------------------
 # A cached MUTABLE container. Streamlit hands back the same dict on every
-# rerun, so it survives like a cached value - but nothing is drawn inside a
+# rerun, so it survives like a cached value - but nothing is DRAWN inside a
 # cached function, which is the point.
 #
-# WHY NOT just draw inside @st.cache_resource? That was the first attempt and
-# it raised CacheReplayClosureError on the SECOND run:
-#
-#     While running bootstrap(), a streamlit element is called on some layout
-#     block created outside the function. This is incompatible with replaying
-#     the cached effect of that element.
-#
-# On a cache HIT Streamlit replays the elements the function drew last time -
-# but our placeholder belonged to the previous run and no longer exists.
-# Caching a value is fine; caching drawing is not.
+# WHY NOT draw inside @st.cache_resource? That was the first attempt and it
+# raised CacheReplayClosureError on the SECOND run: on a cache hit Streamlit
+# replays the elements the function drew last time, but the placeholder it
+# drew into belonged to the previous run and no longer exists.
+# Cache values, never drawing.
 @st.cache_resource(show_spinner=False)
 def ingest_record() -> dict:
     return {"facts": {}, "done": set(), "seconds": 0.0}
@@ -85,15 +77,49 @@ def compiled_graph():
     return build_graph()
 
 
-st.title("📄 Document Assistant")
-
 record = ingest_record()
 
-# The FIRST script run in this process does the real ingestion and draws it
-# live. Later runs find `done` already populated and skip straight through -
-# get_resources() is itself a singleton, so it returns instantly.
+# Session state must exist before the drawer renders.
+st.session_state.setdefault("thread_id", f"web-{uuid.uuid4().hex[:8]}")
+st.session_state.setdefault("messages", [])
+st.session_state.setdefault("drawer_open", False)
+st.session_state.setdefault("last_events", [])
+st.session_state.setdefault("last_route", None)
+
+st.markdown(styles(st.session_state.drawer_open), unsafe_allow_html=True)
+
+# --- Header + the drawer toggle -------------------------------------------
+head, toggle = st.columns([5, 1])
+with head:
+    st.title("📄 Document Assistant")
+with toggle:
+    st.write("")
+    label = "✕  Hide steps" if st.session_state.drawer_open else "⚡  Show steps"
+    if st.button(label, width="stretch"):
+        st.session_state.drawer_open = not st.session_state.drawer_open
+        st.rerun()
+
+# --- The right-hand drawer -------------------------------------------------
+# Rendered on EVERY run, open or shut. Closed just means translated off-screen
+# by CSS - so the live updates below can write into it while it is hidden, and
+# opening it mid-question shows the run already in progress.
+drawer = st.container(key="steps_drawer")
+with drawer:
+    st.markdown("#### ⚡ Pipeline")
+    st.caption("What the graph did for the most recent question.")
+    live_flow = st.empty()
+    live_flow.markdown(
+        query_html(st.session_state.last_events,
+                   route=st.session_state.last_route),
+        unsafe_allow_html=True)
+
+    st.divider()
+    st.markdown("###### Startup — ingestion, ran once")
+    ingest_slot = st.empty()
+    ingest_caption = st.empty()
+
+# --- Ingestion (first script run in this process only) --------------------
 if not record["done"]:
-    live = st.empty()
     current = {"stage": None}
 
     def on_stage(stage, fact):
@@ -103,36 +129,24 @@ if not record["done"]:
             record["facts"][stage] = fact
             record["done"].add(stage)
             current["stage"] = None
-        live.graphviz_chart(
-            ingestion_dot(current["stage"], record["done"], record["facts"]),
-            width='stretch')
+        ingest_slot.markdown(
+            ingestion_html(current["stage"], record["done"], record["facts"]),
+            unsafe_allow_html=True)
 
     t0 = time.time()
     with st.spinner("Starting up - reading and embedding your documents..."):
         get_resources(on_stage=on_stage)      # the expensive part
     record["seconds"] = time.time() - t0
-    live.empty()                              # it reappears in the expander below
+
+ingest_slot.markdown(
+    ingestion_html(None, record["done"], record["facts"]),
+    unsafe_allow_html=True)
+ingest_caption.caption(
+    f"Ran once in {record['seconds']:.1f}s — not per question. "
+    "Embedding is ~90% of it.")
 
 graph = compiled_graph()
 sources = list_sources()
-boot = record
-
-with st.expander(f"⚙️ Ingestion pipeline — ran once at startup "
-                 f"({boot['seconds']:.1f}s)"):
-    st.graphviz_chart(ingestion_dot(None, boot["done"], boot["facts"]),
-                      width='stretch')
-    st.caption(
-        "This happens once per server, not per question. Embedding is ~90% "
-        "of it. Documents are read from `docs/`, split into overlapping "
-        "chunks, turned into 384-dimension vectors, and kept in a searchable "
-        "store."
-    )
-
-# One conversation per browser session; the checkpointer keys off this id.
-if "thread_id" not in st.session_state:
-    st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
 # --- Sidebar --------------------------------------------------------------
 with st.sidebar:
@@ -144,36 +158,25 @@ with st.sidebar:
     st.caption(f"Language model: `{describe_llm()}`")
     st.caption("Search: `fastembed / bge-small-en-v1.5`")
 
-    st.subheader("Legend")
-    st.markdown(
-        "🟡 running now  \n"
-        "🟢 finished  \n"
-        "⚪ not reached  \n"
-        "🔴 gave up  \n"
-        "*dashed edge* = the retry cycle"
-    )
-
     st.divider()
     st.caption(f"Conversation: `{st.session_state.thread_id}`")
-    st.caption(f"Full trace log: `logs/{TEXT_LOG.name}`")
-    if st.button("New conversation"):
+    st.caption(f"Trace log: `logs/{TEXT_LOG.name}`")
+    if st.button("New conversation", width="stretch"):
         st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
         st.session_state.messages = []
+        st.session_state.last_events = []
         st.rerun()
 
 st.caption("Ask about the documents in the sidebar. Follow-up questions work.")
 
-# --- Replay history -------------------------------------------------------
+# --- History ---------------------------------------------------------------
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg.get("dot"):
-            with st.expander(f"🔎 Path through the graph ({msg['elapsed']:.0f}s)"):
-                left, right = st.columns([3, 2])
-                with left:
-                    st.graphviz_chart(msg["dot"], width='stretch')
-                with right:
-                    st.code(msg["steps"], language="text")
+        if msg.get("events"):
+            with st.expander(f"Steps for this answer ({msg['elapsed']:.0f}s)"):
+                st.markdown(query_html(msg["events"], route=msg.get("route")),
+                            unsafe_allow_html=True)
 
 # --- New message ----------------------------------------------------------
 if question := st.chat_input("Ask a question..."):
@@ -183,24 +186,22 @@ if question := st.chat_input("Ask a question..."):
 
     with st.chat_message("assistant"):
         status = st.empty()
-        diagram_col, steps_col = st.columns([3, 2])
-        diagram = diagram_col.empty()
-        step_log = steps_col.empty()
 
-        # Live state for the diagram
-        done, facts, failed = set(), {}, set()
-        route, steps, answer, used_docs = None, [], "", []
+        events, route, answer, used_docs = [], None, "", []
         attempts = 0
-
-        diagram.graphviz_chart(query_dot(current="contextualize"),
-                               width='stretch')
-        status.info(STEP_LABELS["contextualize"])
-
         t0 = time.time()
+
+        def paint(current=None):
+            """Redraw the drawer's flow. Safe whether it is open or shut."""
+            live_flow.markdown(query_html(events, current, route),
+                               unsafe_allow_html=True)
+
+        paint("contextualize")
+        status.info(STEP_LABELS["contextualize"])
         qtrace = start_trace(question, st.session_state.thread_id)
 
-        # stream_mode="updates" yields after EACH node, so we can redraw the
-        # diagram and append a step line as the graph runs.
+        # stream_mode="updates" yields after EACH node, so we can append a
+        # step and repaint as the graph runs.
         for chunk in graph.stream(
             turn_input(question),
             config=thread(st.session_state.thread_id),
@@ -208,56 +209,37 @@ if question := st.chat_input("Ask a question..."):
         ):
             for node, update in chunk.items():
                 elapsed = time.time() - t0
-                done.add(node)
-                facts[node] = fact_for(node, update, question)
-                if node == "retrieve":
-                    attempts = update["attempts"]
+                detail = fact_for(node, update, question)
 
-                # --- detail line for the step log ------------------------
-                if node == "contextualize":
-                    q = update["standalone_question"]
-                    detail = (f"-> {q!r}" if q.lower() != question.lower()
-                              else "already self-contained")
-                elif node == "classify":
+                if node == "classify":
                     route = update["route"]
-                    detail = f"-> {route}"
                 elif node == "retrieve":
-                    ids = ", ".join(cite(d) for d in update["documents"])
-                    detail = f"attempt {update['attempts']}: {ids}"
+                    attempts = update["attempts"]
+                    detail += "  |  " + ", ".join(
+                        cite(d) for d in update["documents"])
                 elif node == "grade_docs":
                     kept = update["relevant_docs"] or []
                     used_docs.extend(kept)
-                    detail = (f"kept {len(kept)}: "
-                              + (", ".join(cite(d) for d in kept) or "nothing"))
-                elif node == "rewrite_query":
-                    detail = f"-> {update['question']!r}"
-                else:
-                    detail = ""
+                    if kept:
+                        detail += ": " + ", ".join(cite(d) for d in kept)
+                elif node in ("generate", "chat_reply", "no_answer"):
                     answer = update.get("answer", answer)
-                    if node == "no_answer":
-                        failed.add(node)
 
-                steps.append(f"[{elapsed:5.1f}s] {node}\n           {detail}"
-                             if detail else f"[{elapsed:5.1f}s] {node}")
-                step_log.code("\n".join(steps), language="text")
+                events.append({"node": node, "detail": detail,
+                               "seconds": elapsed})
 
-                # --- redraw with the NEXT node highlighted ---------------
-                upcoming = next_node(node, update,
-                                     kept_total=len(used_docs),
+                upcoming = next_node(node, update, kept_total=len(used_docs),
                                      attempts=attempts)
-                diagram.graphviz_chart(
-                    query_dot(upcoming, done, facts, route, failed),
-                    width='stretch')
-                status.info(STEP_LABELS.get(upcoming, "Working..."))
+                paint(upcoming)
+                status.info(STEP_LABELS.get(upcoming, "Finishing up..."))
 
         elapsed = time.time() - t0
         qtrace.finish(answer)
         status.empty()
+        paint()                                   # final, nothing running
 
-        final_dot = query_dot(None, done, facts, route, failed)
-        diagram.graphviz_chart(final_dot, width='stretch')
-        steps_text = "\n".join(steps)
-        step_log.code(steps_text, language="text")
+        st.session_state.last_events = events
+        st.session_state.last_route = route
 
         st.markdown(answer)
 
@@ -274,5 +256,5 @@ if question := st.chat_input("Ask a question..."):
 
     st.session_state.messages.append({
         "role": "assistant", "content": answer,
-        "dot": final_dot, "steps": steps_text, "elapsed": elapsed,
+        "events": events, "route": route, "elapsed": elapsed,
     })
